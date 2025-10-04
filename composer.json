@@ -1,11 +1,11 @@
 {
-  "name": "jasperweyne/piwigo_oidc",
+  "name": "proximapp/piwigo_oidc",
   "description": "A Piwigo plugin for OpenID Connect authentication of users.",
   "license": "apache-2.0",
   "authors": [
     {
-      "name": "Jasper Weyne",
-      "email": "jasperweyne@gmail.com"
+      "name": "ProximApp",
+      "email": "contact@proximapp.fr"
     }
   ],
   "require": {

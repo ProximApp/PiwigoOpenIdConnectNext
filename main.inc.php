@@ -3,9 +3,9 @@
 Plugin Name: OpenId Connect
 Version: 1.0.4
 Description: This plugin provides OpenID Connect integration.
-Plugin URI: http://piwigo.org/ext/extension_view.php?eid=918
-Author: Jasper Weyne
-Author URI: http://github.com/jasperweyne
+Plugin URI: https://piwigo.org/ext/index.php?eid=1049
+Author: ProximApp (originally Jasper Weyne)
+Author URI: https://github.com/ProximApp/PiwigoOpenIdConnectNext
 Has Settings: true
 */
 
