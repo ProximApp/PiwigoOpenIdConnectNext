@@ -23,6 +23,8 @@ return [
     // 'client_secret' => '',
     // 'scope' => '',
     // 'preferred_username' => '',
+    // 'manage_groups' => false,
+    // 'group_claim' => '',
     // 'proxy' => '',
     // 'verify_host' => false,
     // 'verify_peer' => false,
