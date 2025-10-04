@@ -1,0 +1,22 @@
+name: Generate composer.lock
+on:
+  pull_request:
+    types: [opened, edited, ready_for_review, synchronize]
+  push:
+    branches:
+      - main
+
+jobs:
+  generate_composer_lock:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Composer install
+        uses: php-actions/composer@v6
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PiwigoOpenIdConnect
+          path: .
