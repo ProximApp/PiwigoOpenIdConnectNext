@@ -25,3 +25,8 @@ Alternatively, you can download a release and
 unzip it to the /plugins folder within your Piwigo installation. Enable the
 plugin from Piwigo (it should be visible), and configure the plugin through the
 admin. Test that your installation is functional before enabling a flow.
+
+## Change the configuration from conf.php
+
+If OIDC is enabled, and you need to login using a non-oidc account, you can change the value of `authorization_code_flow` or
+`password_flow` to false in conf.php file.
