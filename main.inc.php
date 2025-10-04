@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: OpenId Connect
-Version: 2.0.0
+Version: 2.0.4
 Description: This plugin provides OpenID Connect integration.
 Plugin URI: https://piwigo.org/ext/index.php?eid=1049
 Author: ProximApp (originally Jasper Weyne)
