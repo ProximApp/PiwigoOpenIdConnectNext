@@ -263,7 +263,12 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 
 	// If the user is not found, try to register
 	if (empty($row['id'])) {
-		if ($config['register_new_users'] || $force_registration) {
+		$id = false;
+		if (!empty($config['link_to_existing_users'])) {
+			// Trying to find an already existing account with the same login
+			$id = get_userid($name);
+		}
+		if ($id === false && ($config['register_new_users'] || $force_registration)) {
 			// Registration is allowed, overwrite $row
 			// register_user() expects SQL-escaped input (like Piwigo's addslashes'd $_POST),
 			// while the claims returned by the provider are raw values.
@@ -296,14 +301,18 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 				oidc_registration_failed($name, $errors);
 				return null;
 			}
-			$row['id'] = (int)$user_id;
+			$id = $user_id;
+		}
+		if ($id !== false) {
+			// User account found (existing or just created), overwrite $row
+			$row['id'] = (int)$id;
 			// single_insert() does not escape values
 			single_insert(OIDC_TABLE, [
 				'sub' => pwg_db_real_escape_string($sub),
 				'user_id' => $row['id'],
 			]);
 		} else {
-			// Registration is not allowed, fail
+			// No way to link to existing user and/or registration is not allowed, fail
 			return null;
 		}
 	}
