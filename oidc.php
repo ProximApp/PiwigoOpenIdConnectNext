@@ -203,6 +203,25 @@ function oidc_registration_failed($name, array $errors)
 }
 
 /**
+ * Show a message to the user on the next page, for interactive logins only
+ * (not through the webservice, whose clients would see it later in the
+ * gallery). The message must not contain values from the provider: page
+ * messages are not escaped by the templates.
+ *
+ * Stored as an info: the gallery themes display errors and infos, not
+ * warnings.
+ *
+ * @param string $message
+ */
+function oidc_user_warning($message)
+{
+	if (script_basename() == 'ws') {
+		return;
+	}
+	$_SESSION['page_infos'][] = $message;
+}
+
+/**
  * Write a message for the administrator in the PHP error log.
  *
  * error_log() and not trigger_error(): never displayed in the page, even with
@@ -330,8 +349,10 @@ function oidc_update_user(OpenIDConnectClient $oidc, $user_id)
 		$owner = get_userid($name);
 		if ($name === '' || trim($name) !== $name || strip_tags($name) !== $name) {
 			oidc_log('username "' . $name . '" of user #' . $user_id . ' not applied: invalid username');
+			oidc_user_warning(l10n('Your username was not updated from your OpenID Connect account: it is not a valid Piwigo username.'));
 		} elseif ($owner !== false && (int)$owner !== $user_id) {
 			oidc_log('username "' . $name . '" of user #' . $user_id . ' not applied: already used by user #' . (int)$owner);
+			oidc_user_warning(l10n('Your username was not updated from your OpenID Connect account: it is already used by another account.'));
 		} else {
 			$data[$conf['user_fields']['username']] = pwg_db_real_escape_string($name);
 		}
@@ -348,8 +369,10 @@ SELECT COUNT(*) FROM ' . USERS_TABLE . '
 		list($count) = pwg_db_fetch_row(pwg_query($query));
 		if (!email_check_format($email)) {
 			oidc_log('e-mail "' . $email . '" of user #' . $user_id . ' not applied: invalid e-mail');
+			oidc_user_warning(l10n('Your e-mail address was not updated from your OpenID Connect account: it is not a valid e-mail address.'));
 		} elseif ($count != 0) {
 			oidc_log('e-mail "' . $email . '" of user #' . $user_id . ' not applied: already used by another user');
+			oidc_user_warning(l10n('Your e-mail address was not updated from your OpenID Connect account: it is already used by another account.'));
 		} else {
 			$data[$conf['user_fields']['email']] = pwg_db_real_escape_string($email);
 		}

@@ -78,7 +78,8 @@ try {
         // Interactive login, equivalent to identification.php
         $_SESSION['connected_with'] = 'pwg_ui';
     } else {
-        $_SESSION['page_warnings'][] = l10n('Login not successful, try again.');
+        // An error: the gallery themes do not display warnings
+        $_SESSION['page_errors'][] = l10n('Login not successful, try again.');
     }
 } catch (\Exception $e) {
     // Test flow
