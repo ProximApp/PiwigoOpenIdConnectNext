@@ -66,6 +66,23 @@ class OpenIdConnect_maintain extends PluginMaintain
 
 	function update($old_version, $new_version, &$errors=array())
 	{
+		global $conf;
+
+		// Add the settings introduced since the installed version, with their
+		// default value, keeping the existing values
+		$config = safe_unserialize($conf['OIDC'] ?? null);
+		if (is_array($config))
+		{
+			// 'group_claim' is the legacy name of 'groups_claim'
+			if (!isset($config['groups_claim']) && isset($config['group_claim']))
+			{
+				$config['groups_claim'] = $config['group_claim'];
+			}
+			unset($config['group_claim']);
+
+			conf_update_param('OIDC', $config + $this->default_conf, true);
+		}
+
 		$this->install($new_version, $errors);
 	}
 
