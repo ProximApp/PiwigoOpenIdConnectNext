@@ -10,15 +10,14 @@
 #   docker run --rm -v "$PWD":/app -w /app composer:2 sh build-release.sh
 set -eu
 cd "$(dirname "$0")"
-git config --global --add safe.directory "$PWD" 2> /dev/null || true
 
-if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+if [ -n "$(git -c safe.directory="$PWD" status --porcelain --untracked-files=no)" ]; then
   echo "Warning: uncommitted changes are not included (the build uses HEAD)" >&2
 fi
 
 rm -rf build
 mkdir build
-git archive --format=tar --prefix=OpenIdConnect/ HEAD | tar -x -C build
+git -c safe.directory="$PWD" archive --format=tar --prefix=OpenIdConnect/ HEAD | tar -x -C build
 composer install --working-dir=build/OpenIdConnect --no-dev --no-interaction --no-progress --optimize-autoloader
 
 if [ "${NO_ZIP:-}" != 1 ]; then
