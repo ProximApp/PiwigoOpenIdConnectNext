@@ -2,3 +2,5 @@
 .DS_Store
 /OpenIdConnect/
 /OpenIdConnect.zip
+/build/
+/dev/

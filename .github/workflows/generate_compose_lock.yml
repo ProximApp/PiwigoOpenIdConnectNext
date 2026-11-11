@@ -1,4 +1,4 @@
-name: Generate composer.lock
+name: Build release
 on:
   pull_request:
     types: [opened, edited, ready_for_review, synchronize]
@@ -7,16 +7,19 @@ on:
       - main
 
 jobs:
-  generate_composer_lock:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Composer install
-        uses: php-actions/composer@v6
+      # ubuntu-latest provides git, php, composer and zip
+      - name: Build
+        run: NO_ZIP=1 sh build-release.sh
 
+      # The artifact zip contains the OpenIdConnect/ directory, ready to be
+      # unzipped in the plugins/ directory of Piwigo
       - uses: actions/upload-artifact@v4
         with:
-          name: PiwigoOpenIdConnect
-          path: .
+          name: OpenIdConnect
+          path: build/

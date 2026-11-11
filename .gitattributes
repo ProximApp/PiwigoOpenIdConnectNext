@@ -1,0 +1,5 @@
+# Not shipped in the release (see build-release.sh, git archive)
+/.gitattributes export-ignore
+/.github export-ignore
+/.gitignore export-ignore
+/build-release.sh export-ignore
