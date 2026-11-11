@@ -22,6 +22,33 @@ require __DIR__ . '/vendor/autoload.php';
 use Jumbojett\OpenIDConnectClient;
 
 /**
+ * Normalize the issuer URL entered by the administrator.
+ *
+ * The library adds /.well-known/openid-configuration itself, but the
+ * discovery URL is often entered instead of the issuer: remove it, and the
+ * trailing slashes (ignored by the library, which also accepts an issuer
+ * claim with or without a trailing slash).
+ *
+ * @param string $url
+ * @return string
+ */
+function oidc_normalize_issuer_url($url)
+{
+	$url = trim((string)$url);
+	$url = preg_replace('#/\.well-known/openid-configuration/*$#i', '', $url);
+	return rtrim($url, '/');
+}
+
+/**
+ * Whether the provider settings needed by every flow are set
+ */
+function oidc_provider_configured()
+{
+	global $conf;
+	return ($conf['OIDC']['issuer_url'] ?? '') !== '' && ($conf['OIDC']['client_id'] ?? '') !== '';
+}
+
+/**
  * Create an instance of OpenIDConnectClient with the configured settings
  */
 function get_oidc_client() {
@@ -30,7 +57,7 @@ function get_oidc_client() {
 	
 	// Create OIDC client
 	$oidc = new OpenIDConnectClient(
-		$config['issuer_url'] ?? '',
+		oidc_normalize_issuer_url($config['issuer_url'] ?? ''),
 		$config['client_id'] ?? '',
 		$config['client_secret'] ?? ''
 	);

@@ -23,21 +23,30 @@ if (!empty($_POST))
 	check_pwg_token();
 }
 
-// Authorization flow forms
-if (isset($_POST['authorization_create']))
+// The tests use the saved settings, not the values of the settings form
+$oidc_test = isset($_POST['authorization_create']) || isset($_POST['authorization_test'])
+	|| isset($_POST['password_test']) || isset($_POST['password_create']);
+if ($oidc_test && !oidc_provider_configured())
 {
-	$_SESSION[OIDC_SESSION . '_auth'] = 'create';
-	redirect(OIDC_PATH . 'auth.php'); 
+	$page['errors'][] = l10n('Enter the Issuer URL and the Client ID, and save the settings before testing: the tests use the saved settings.');
+	$oidc_test = false;
 }
 
-if (isset($_POST['authorization_test']))
+// Authorization flow forms
+if ($oidc_test && isset($_POST['authorization_create']))
+{
+	$_SESSION[OIDC_SESSION . '_auth'] = 'create';
+	redirect(OIDC_PATH . 'auth.php');
+}
+
+if ($oidc_test && isset($_POST['authorization_test']))
 {
 	$_SESSION[OIDC_SESSION . '_auth'] = 'test';
-	redirect(OIDC_PATH . 'auth.php'); 
+	redirect(OIDC_PATH . 'auth.php');
 }
 
 // Password flow forms
-if (isset($_POST['password_test']) || isset($_POST['password_create']))
+if ($oidc_test && (isset($_POST['password_test']) || isset($_POST['password_create'])))
 {
 	// Build a token request
 	$oidc = get_oidc_client();
@@ -51,7 +60,13 @@ if (isset($_POST['password_test']) || isset($_POST['password_create']))
 	try {
 		$response = $oidc->requestResourceOwnerToken(true);
 		if (!isset($response->access_token)) {
-			$page['errors'][] = htmlspecialchars(($response->error ?? 'unknown_error') . (isset($response->error_description) ? ': ' . $response->error_description : ''));
+			$error = (string)($response->error ?? 'unknown_error');
+			// unsupported_grant_type is the standard error, some providers
+			// return a text instead (Pocket ID: "Grant type not supported")
+			if ($error === 'unsupported_grant_type' || stripos($error, 'grant type') !== false) {
+				$page['errors'][] = l10n('The provider does not support the resource owner credentials flow (password grant). Use the authorization code flow.');
+			}
+			$page['errors'][] = htmlspecialchars($error . (isset($response->error_description) ? ': ' . $response->error_description : ''));
 		} else {
 			// Token request succeeded, store token in $oidc
 			$oidc->setAccessToken($response->access_token);
@@ -84,8 +99,15 @@ if (isset($_POST['save_config']))
 	$text = function ($name) {
 		return trim(stripslashes($_POST[$name] ?? ''));
 	};
+	$issuer_url = oidc_normalize_issuer_url($text('issuer_url'));
+	if ($issuer_url !== $text('issuer_url') && $issuer_url !== '') {
+		$page['infos'][] = htmlspecialchars(l10n('The Issuer URL has been changed to %s: the provider settings are found at /.well-known/openid-configuration automatically.', $issuer_url));
+	}
+	if ($issuer_url !== '' && !preg_match('#^https?://[^/?\#]+#i', $issuer_url)) {
+		$page['errors'][] = l10n('The Issuer URL must be a full URL, starting with https://');
+	}
 	$conf['OIDC'] = [
-		'issuer_url' => $text('issuer_url'),
+		'issuer_url' => $issuer_url,
 		'client_id' => $text('client_id'),
 		'client_secret' => $text('client_secret'),
 		// We want to save password_test_user and password_test_pass

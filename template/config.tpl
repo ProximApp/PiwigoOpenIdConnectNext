@@ -38,6 +38,12 @@
 			<i style="display:inline-block;max-width:30rem;line-height:normal">{'Enabling a flow disables non-OpenID Connect account login. Please test your flow before enabling and make sure at least one OpenID Connect account has webmaster access rights. In case of failure, any config can be overridden by the conf.php found in the plugin folder.'|translate}</i>
 		</li>
 		<li>
+			<i style="display:inline-block;max-width:30rem;line-height:normal">{'The tests use the saved settings: save the settings before testing.'|translate}</i>
+		</li>
+		<li id="oidc_unsaved" hidden>
+			<strong style="color:#c00">{'The settings have unsaved changes: save them before testing.'|translate}</strong>
+		</li>
+		<li>
 			<input form="test_auth" type="submit" name="authorization_test" value="{'Test authorization code flow'|translate}">
 			<input form="test_auth" type="submit" name="authorization_create" value="{'Create user with authorization code flow'|translate}">
 		</li>
@@ -185,6 +191,32 @@
 <p style="text-align:left;"><input type="submit" name="save_config" value="{'Save Settings'|translate}"></p>
 </form>
 </div>
+
+{footer_script}{literal}
+// The tests use the saved settings: block them while the settings form has
+// unsaved changes (the test inputs, attached to the test forms, are ignored)
+(function () {
+	var settings = document.querySelector('#configContent form.properties');
+	var dirty = false;
+	var markDirty = function (e) {
+		if (e.target.form === settings) {
+			dirty = true;
+		}
+	};
+	settings.addEventListener('input', markDirty);
+	settings.addEventListener('change', markDirty);
+	['test_auth', 'test_pass'].forEach(function (id) {
+		document.getElementById(id).addEventListener('submit', function (e) {
+			if (dirty) {
+				e.preventDefault();
+				var warning = document.getElementById('oidc_unsaved');
+				warning.hidden = false;
+				warning.scrollIntoView({block: 'center'});
+			}
+		});
+	});
+})();
+{/literal}{/footer_script}
 
 <div style="text-align:right;">
   Developed by Jasper Weyne
