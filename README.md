@@ -58,4 +58,4 @@ disable *Apply the login checks of other plugins to OpenID Connect users*.
 
 The `pwg.session.login_oidc` webservice method logs a user in using an OpenID Connect access token. It is only available when one of the flows is enabled.
 
-To prevent tokens issued to other applications from being replayed, the token is checked with the provider's token introspection endpoint (RFC 7662): it must be active and issued to the plugin `client_id`, or to one of the clients listed in `api_trusted_client_ids` in conf.php. Providers without an introspection endpoint cannot be used for API login.
+To prevent tokens issued to other applications from being replayed, the token is checked with the provider's token introspection endpoint (RFC 7662): it must be active and issued to the plugin `client_id`, or to one of the clients listed in `api_trusted_client_ids` in conf.php. Providers without an introspection endpoint cannot be used for API login. Some providers only let a client introspect its own tokens (Pocket ID for example): `api_trusted_client_ids` has no effect with them, only tokens issued to the plugin `client_id` are accepted.
