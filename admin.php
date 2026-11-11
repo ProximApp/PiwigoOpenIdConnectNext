@@ -17,6 +17,12 @@
 
 defined('OIDC_PATH') or die('Hacking attempt!');
 
+// CSRF protection: every form of this page must carry a valid pwg_token
+if (!empty($_POST))
+{
+	check_pwg_token();
+}
+
 // Authorization flow forms
 if (isset($_POST['authorization_create']))
 {
@@ -44,7 +50,7 @@ if (isset($_POST['password_test']) || isset($_POST['password_create']))
 	try {
 		$response = $oidc->requestResourceOwnerToken(true);
 		if (!isset($response->access_token)) {
-			$page['errors'][] = $response->error . (isset($response->error_description) ? ': ' . $response->error_description : '');
+			$page['errors'][] = htmlspecialchars(($response->error ?? 'unknown_error') . (isset($response->error_description) ? ': ' . $response->error_description : ''));
 		} else {
 			// Token request succeeded, store token in $oidc
 			$oidc->setAccessToken($response->access_token);
@@ -66,7 +72,7 @@ if (isset($_POST['password_test']) || isset($_POST['password_create']))
 		}
 	} catch (\Exception $e) {
 		// Catch all
-		$page['errors'][] = $e->getMessage();
+		$page['errors'][] = htmlspecialchars($e->getMessage());
 	}
 }
 
@@ -111,7 +117,10 @@ if (!$conf['allow_user_registration'] && $conf['OIDC']['register_new_users']) {
 
 // Render page
 $template->assign($conf['OIDC']);
-$template->assign(['redirect_url' => embellish_url(get_absolute_root_url() . OIDC_PATH . 'auth.php')]);
+$template->assign([
+	'redirect_url' => embellish_url(get_absolute_root_url() . OIDC_PATH . 'auth.php'),
+	'PWG_TOKEN' => get_pwg_token(),
+]);
 
 $template->set_filename('oidc_config', realpath(OIDC_PATH . 'template/config.tpl'));
 $template->assign_var_from_handle('ADMIN_CONTENT', 'oidc_config');

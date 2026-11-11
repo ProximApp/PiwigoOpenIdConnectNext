@@ -78,12 +78,14 @@ try {
     // Test flow
     if (isset($_SESSION[OIDC_SESSION . '_auth'])) {
         unset($_SESSION[OIDC_SESSION . '_auth']);
-        echo $e->getMessage();
+        // Exception messages may contain attacker-controlled data (e.g. error_description from the query string)
+        echo htmlspecialchars($e->getMessage());
         exit;
     }
 
     // Authentication flow
-    $_SESSION['page_errors'][] = $e->getMessage();
+    // page_errors are rendered without escaping by Piwigo templates
+    $_SESSION['page_errors'][] = htmlspecialchars($e->getMessage());
 }
 
 redirect(get_gallery_home_url());
