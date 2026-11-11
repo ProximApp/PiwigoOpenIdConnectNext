@@ -91,6 +91,7 @@ if (isset($_POST['save_config']))
 		'verify_peer' => isset($_POST['verify_peer']), 
 		'authparam' => $_POST['authparam'], 
 		'register_new_users' => isset($_POST['register_new_users']), 
+		'link_to_existing_users' => isset($_POST['link_to_existing_users']),
 		'redirect_new_to_profile' => isset($_POST['redirect_new_to_profile']), 
 		'notify_admins_on_register' => isset($_POST['notify_admins_on_register']),
 		'notify_user_on_register' => isset($_POST['notify_user_on_register']), 

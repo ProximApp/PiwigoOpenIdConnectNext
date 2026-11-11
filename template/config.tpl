@@ -101,6 +101,13 @@
 			<label for="register_new_users">{'Register new Piwigo users on succesful OpenID Connect authentication'|translate}</label>
 		</li>
 		<li>
+			<i style="display:inline-block;max-width:30rem">WARNING: do not enable this setting if you do not control OID logins. Else, this would allows one to takeover control on local piwigo accounts (such as the default admin account).
+			It is useful in case of migration from LDAP accounts to OIDC SSO setup for example.</i>
+			<br/>
+			<input type="checkbox" name="link_to_existing_users" id="link_to_existing_users" {if $link_to_existing_users}checked="checked"{/if}>
+			<label for="link_to_existing_users">{'If a user with same login already exists, link OpenID account to it'|translate}</label>
+		</li>
+		<li>
 			<input type="checkbox" name="redirect_new_to_profile" id="redirect_new_to_profile" {if $redirect_new_to_profile}checked="checked"{/if}>
 			<label for="redirect_new_to_profile">{'Redirect new users to profile page'|translate}</label>
 		</li>

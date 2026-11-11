@@ -125,8 +125,13 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 
 	// If the user is not found, try to register
 	if (empty($row['id'])) {
-		if ($config['register_new_users'] || $force_registration) {
-			// Registration is allowed, overwrite $row on success
+		$id = false;
+		if ($config['link_to_existing_users']) {
+			// Trying to find a already existing account with same login
+			$id = get_userid($name);
+		}
+		if (!$id && ($config['register_new_users'] || $force_registration)) {
+			// Registration is allowed, trying to register
 			$errors = [];
 			$id = register_user($name, random_pass(), $email, $config['notify_admins_on_register'], $errors, $config['notify_user_on_register']);
 			if (!empty($errors) or !$id) {
@@ -137,13 +142,16 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 				trigger_error("A problem occurred during OIDC user '".$name."' registration. Local user already existing?");
 				return null;
 			}
+		}
+		if ($id) {
+			// User account found (existing or just created), overwrite $row
 			$row['id'] = $id;
 			single_insert(OIDC_TABLE, [
 				'sub' => $sub,
 				'user_id' => $row['id'],
 			]);
 		} else {
-			// Registration is not allowed, fail
+			// No way to link to existing user and/or registration is not allowed, fail
 			return null;
 		}
 	}
