@@ -31,6 +31,20 @@ admin. Test that your installation is functional before enabling a flow.
 If OIDC is enabled, and you need to login using a non-oidc account, you can change the value of `authorization_code_flow` or
 `password_flow` to false in conf.php file.
 
+## Local accounts when a flow is enabled
+
+When a flow is enabled, local Piwigo passwords are disabled everywhere (login page, `pwg.session.login`,
+`pwg.images.uploadAsync`), and sessions not opened with OpenID Connect are logged out. These still work:
+
+- API keys (`X-PIWIGO-API` header, or as credentials of `pwg.session.login`);
+- authentication keys (`?auth=` links sent by e-mail).
+
+Users logged in with OpenID Connect can manage their API keys from their profile. An API key keeps working even if
+the user is removed from the provider: revoke it in Piwigo too.
+
+As a fallback, the *Allow webmasters to log in with their local password* option lets webmasters log in with their
+local password on `identification.php?oidc_local=1` only (never through the API).
+
 ## Login through the API
 
 The `pwg.session.login_oidc` webservice method logs a user in using an OpenID Connect access token. It is only available when one of the flows is enabled.

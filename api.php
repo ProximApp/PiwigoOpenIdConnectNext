@@ -106,6 +106,7 @@ function api_login($params, &$service)
         $tokens->access_token = $access_token;
         if (oidc_login($oidc, $tokens, false))
         {
+            $_SESSION['connected_with'] = 'ws_session_login';
             return true;
         }
     } catch (\Exception $e) {

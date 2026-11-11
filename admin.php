@@ -104,6 +104,7 @@ if (isset($_POST['save_config']))
 		'password_flow' => isset($_POST['password_flow']), 
 		'password_reset_url' => $_POST['password_reset_url'], 
 		'registration_url' => $_POST['registration_url'],
+		'local_webmaster_login' => isset($_POST['local_webmaster_login']),
 	];
 
 	conf_update_param('OIDC', $conf['OIDC']);
@@ -111,6 +112,9 @@ if (isset($_POST['save_config']))
 }
 
 // General warnings
+if (oidc_enforced() && empty($_SESSION[OIDC_SESSION]) && !oidc_local_session_allowed($user)) {
+	$page['warnings'][] = l10n('An OpenID Connect flow is enabled but you are not logged in with OpenID Connect: you will be logged out at the next page load. Make sure an OpenID Connect account has webmaster access rights, or enable the webmaster local login.');
+}
 if (!$conf['allow_user_registration'] && $conf['OIDC']['register_new_users']) {
 	$page['warnings'][] = l10n('User registration is disabled in the Piwigo settings. This behaviour will be overridden by this plugin.');
 }
@@ -120,6 +124,7 @@ $template->assign($conf['OIDC']);
 $template->assign([
 	'redirect_url' => embellish_url(get_absolute_root_url() . OIDC_PATH . 'auth.php'),
 	'PWG_TOKEN' => get_pwg_token(),
+	'local_login_url' => get_absolute_root_url() . 'identification.php?oidc_local=1',
 ]);
 
 $template->set_filename('oidc_config', realpath(OIDC_PATH . 'template/config.tpl'));

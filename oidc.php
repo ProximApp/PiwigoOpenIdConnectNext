@@ -60,7 +60,7 @@ function get_oidc_client() {
  */
 function can_authorization_grant() {
 	global $conf;
-	return $conf['OIDC']['authorization_code_flow'];
+	return !empty($conf['OIDC']['authorization_code_flow']);
 }
 
 /**
@@ -68,7 +68,33 @@ function can_authorization_grant() {
  */
 function can_resource_owner_credentials_grant() {
 	global $conf;
-	return $conf['OIDC']['password_flow'];
+	return !empty($conf['OIDC']['password_flow']);
+}
+
+/**
+ * Return whether OpenID Connect is enforced, i.e. local password logins are disabled
+ */
+function oidc_enforced() {
+	return can_authorization_grant() || can_resource_owner_credentials_grant();
+}
+
+/**
+ * Return whether the local (password) login fallback for webmasters is enabled
+ */
+function oidc_local_webmaster_login_enabled() {
+	global $conf;
+	return !empty($conf['OIDC']['local_webmaster_login']);
+}
+
+/**
+ * Return whether a session without OpenID Connect token is allowed for $user,
+ * while OpenID Connect is enforced: only webmasters logged in through the
+ * Piwigo login page (or its remember-me cookie), if the fallback is enabled.
+ */
+function oidc_local_session_allowed($user) {
+	return oidc_local_webmaster_login_enabled()
+		&& ($user['status'] ?? null) === 'webmaster'
+		&& ($_SESSION['connected_with'] ?? null) === 'pwg_ui';
 }
 
 /**
@@ -268,19 +294,6 @@ function oidc_login(OpenIDConnectClient $oidc, $token, $remember_me)
 	$name = get_preferred_username($oidc);
 	$email = $oidc->requestUserInfo('email');
 
-	// Store access token in the session
-    $encoded = array();
-	if (isset($token->access_token)) {
-		$encoded['access_token'] = $token->access_token;
-	}
-	if (isset($token->refresh_token)) {
-		$encoded['refresh_token'] = $token->refresh_token;
-	}
-	if (isset($token->expires_in)) {
-		$encoded['expires'] = time() + $token->expires_in;
-	}
-	$_SESSION[OIDC_SESSION] = json_encode($encoded);
-
 	// Update user data from ID token data
 	$fields = array($conf['user_fields']['email'], $conf['user_fields']['username']);
 
@@ -298,10 +311,35 @@ function oidc_login(OpenIDConnectClient $oidc, $token, $remember_me)
 				array($data));
 
 	// Log the user in
-	log_user($id, $remember_me);
-	trigger_notify('login_success', stripslashes($name));
+	// Remember-me is disabled: auto_login() would restore a session without
+	// OpenID Connect token, which refresh_login() rejects
+	log_user($id, false);
+
+	// Store the tokens in the session, once the login is accepted
+	// (log_user() regenerates the session id but keeps its content)
+	oidc_store_token($token, $id);
+
+	trigger_notify('login_success', $name);
 
 	return true;
+}
+
+/**
+ * Store the OpenID Connect tokens of the user $user_id in the session
+ */
+function oidc_store_token($token, $user_id)
+{
+	$encoded = ['uid' => (int)$user_id];
+	if (isset($token->access_token)) {
+		$encoded['access_token'] = $token->access_token;
+	}
+	if (isset($token->refresh_token)) {
+		$encoded['refresh_token'] = $token->refresh_token;
+	}
+	if (isset($token->expires_in)) {
+		$encoded['expires'] = time() + $token->expires_in;
+	}
+	$_SESSION[OIDC_SESSION] = json_encode($encoded);
 }
 
 /**
@@ -309,7 +347,19 @@ function oidc_login(OpenIDConnectClient $oidc, $token, $remember_me)
  */
 function oidc_logout()
 {
-	logout_user();
-	redirect_auth() or redirect('identification.php');
+	if (isset($_SESSION['pwg_uid'])) {
+		logout_user();
+	} else {
+		unset($_SESSION[OIDC_SESSION]);
+	}
+
+	// Webservice: answer with an error instead of an HTML redirection
+	if (script_basename() == 'ws') {
+		include_once(PHPWG_ROOT_PATH . 'include/ws_init.inc.php');
+		$service->sendResponse(new PwgError(401, 'Session expired, please log in again'));
+		exit();
+	}
+
+	redirect_auth() or redirect(get_root_url() . 'identification.php');
 }
 ?>

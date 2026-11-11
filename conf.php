@@ -37,6 +37,9 @@ return [
     // 'password_flow' => false,
     // 'password_reset_url' => '',
     // 'registration_url' => '',
+    // Allow webmasters to log in with their local Piwigo password through
+    // identification.php?oidc_local=1 while a flow is enabled (never through the API)
+    // 'local_webmaster_login' => false,
     // Client IDs, other than client_id, whose access tokens are accepted by the
     // pwg.session.login_oidc API method (e.g. a mobile application registered
     // as a separate client with the same provider).

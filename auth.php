@@ -69,8 +69,9 @@ try {
     }
 
     // Authentication flow
-    if ($success) {
-        oidc_login($oidc, $oidc->getTokenResponse(), false);
+    if ($success && oidc_login($oidc, $oidc->getTokenResponse(), false)) {
+        // Interactive login, equivalent to identification.php
+        $_SESSION['connected_with'] = 'pwg_ui';
     } else {
         $_SESSION['page_warnings'][] = l10n('Login not successful, try again.');
     }

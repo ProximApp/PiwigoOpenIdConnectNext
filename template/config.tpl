@@ -95,6 +95,17 @@
 </fieldset>
 
 <fieldset id="mainConf">
+    <legend>{'Local login'|translate}</legend>
+	<i style="display:inline-block;max-width:30rem">{'When a flow is enabled, local Piwigo passwords are disabled. As a fallback, webmasters can be allowed to log in with their local password on the Piwigo login page only (never through the API):'|translate} {$local_login_url|escape:html}</i>
+	<ul>
+		<li>
+			<input type="checkbox" name="local_webmaster_login" id="local_webmaster_login" {if $local_webmaster_login|default:false}checked="checked"{/if}>
+			<label for="local_webmaster_login">{'Allow webmasters to log in with their local password'|translate}</label>
+		</li>
+	</ul>
+</fieldset>
+
+<fieldset id="mainConf">
     <legend>{'New users'|translate}</legend>
 	<ul>
 		<li>
