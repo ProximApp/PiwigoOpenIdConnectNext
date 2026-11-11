@@ -30,3 +30,9 @@ admin. Test that your installation is functional before enabling a flow.
 
 If OIDC is enabled, and you need to login using a non-oidc account, you can change the value of `authorization_code_flow` or
 `password_flow` to false in conf.php file.
+
+## Login through the API
+
+The `pwg.session.login_oidc` webservice method logs a user in using an OpenID Connect access token. It is only available when one of the flows is enabled.
+
+To prevent tokens issued to other applications from being replayed, the token is checked with the provider's token introspection endpoint (RFC 7662): it must be active and issued to the plugin `client_id`, or to one of the clients listed in `api_trusted_client_ids` in conf.php. Providers without an introspection endpoint cannot be used for API login.

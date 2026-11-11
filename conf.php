@@ -37,6 +37,10 @@ return [
     // 'password_flow' => false,
     // 'password_reset_url' => '',
     // 'registration_url' => '',
+    // Client IDs, other than client_id, whose access tokens are accepted by the
+    // pwg.session.login_oidc API method (e.g. a mobile application registered
+    // as a separate client with the same provider).
+    // 'api_trusted_client_ids' => [],
 ];
 
 ?>
