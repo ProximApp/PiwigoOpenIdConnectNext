@@ -9,7 +9,7 @@
     }
   ],
   "require": {
-    "jumbojett/openid-connect-php": "^0.9.10",
+    "jumbojett/openid-connect-php": "dev-master#d18f81fa0487d4031533c57ecc70f918198c0d0d",
     "php": ">=7.4",
     "phpseclib/phpseclib": "^3.0.58"
   },
