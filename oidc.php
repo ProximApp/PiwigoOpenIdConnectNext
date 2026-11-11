@@ -104,6 +104,27 @@ function get_preferred_username(OpenIDConnectClient $oidc) {
 
 /// Login/logout methods
 /**
+ * Report a failed registration: to the user, who is authenticated at the
+ * provider but cannot be logged in, and to the administrator in the PHP log.
+ *
+ * @param string $name username from the provider
+ * @param string[] $errors messages of register_user()
+ */
+function oidc_registration_failed($name, array $errors)
+{
+	if (empty($errors)) {
+		$errors[] = l10n('Registration failed');
+	}
+	// Displayed like the errors of Piwigo's register.php (page_errors are not
+	// escaped by the templates)
+	$_SESSION['page_errors'] = array_merge($_SESSION['page_errors'] ?? [], $errors);
+	// error_log() and not trigger_error(): never displayed in the page, even
+	// with display_errors on. The username comes from the provider: control
+	// characters are escaped so that it cannot forge log lines.
+	error_log('OpenIdConnect: registration of user "' . addcslashes((string)$name, "\0..\37\\\"") . '" failed: ' . implode(' / ', $errors));
+}
+
+/**
  * Retrieve Piwigo user associated with the current OIDC resource owner
  * Resource owner is authenticated by the access token, stored in $oidc
  */
@@ -126,20 +147,42 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 	// If the user is not found, try to register
 	if (empty($row['id'])) {
 		if ($config['register_new_users'] || $force_registration) {
-			// Registration is allowed, overwrite $row on success
-			$errors = [];
-			$id = register_user($name, random_pass(), $email, $config['notify_admins_on_register'], $errors, $config['notify_user_on_register']);
-			if (!empty($errors) or !$id) {
-				if (!isset($_SESSION['page_errors'])) {
-					$_SESSION['page_errors'] = [];
-				}
-				$_SESSION['page_errors'] += $errors;
-				trigger_error("A problem occurred during OIDC user '".$name."' registration. Local user already existing?");
+			// Registration is allowed, overwrite $row
+			// register_user() expects SQL-escaped input (like Piwigo's addslashes'd $_POST),
+			// while the claims returned by the provider are raw values.
+			// But it also validates these escaped values, which has two side effects
+			// for values containing quotes or backslashes, handled here:
+			//  - the username collision check escapes the login a second time,
+			//    so the check is done here on the raw value;
+			//  - the e-mail format check fails (e.g. o\'brien@example.com), so the
+			//    user is registered without e-mail, oidc_login() sets it right after.
+			if (get_userid($name) !== false) {
+				// Username already used by another account
+				oidc_registration_failed($name, [l10n('this login is already used')]);
 				return null;
 			}
-			$row['id'] = $id;
+			$escaped_email = pwg_db_real_escape_string((string)$email);
+			if ($escaped_email !== (string)$email) {
+				$escaped_email = '';
+			}
+			$errors = [];
+			$user_id = register_user(
+				pwg_db_real_escape_string($name),
+				random_pass(),
+				$escaped_email,
+				$config['notify_admins_on_register'],
+				$errors,
+				$config['notify_user_on_register']
+			);
+			if ($user_id === false || !empty($errors)) {
+				// Registration failed (e.g. e-mail already used), do not link the sub
+				oidc_registration_failed($name, $errors);
+				return null;
+			}
+			$row['id'] = (int)$user_id;
+			// single_insert() does not escape values
 			single_insert(OIDC_TABLE, [
-				'sub' => $sub,
+				'sub' => pwg_db_real_escape_string($sub),
 				'user_id' => $row['id'],
 			]);
 		} else {
@@ -147,6 +190,8 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 			return null;
 		}
 	}
+
+	$row['id'] = (int)$row['id'];
 
 	// Groups registration //
 
@@ -239,10 +284,11 @@ function oidc_login(OpenIDConnectClient $oidc, $token, $remember_me)
 	// Update user data from ID token data
 	$fields = array($conf['user_fields']['email'], $conf['user_fields']['username']);
 
+	// mass_updates() does not escape values, claims returned by the provider must be escaped
 	$data = array();
-	$data[$conf['user_fields']['id']] = $id;
-	$data[$conf['user_fields']['email']] = $email;
-	$data[$conf['user_fields']['username']] = $name;
+	$data[$conf['user_fields']['id']] = (int)$id;
+	$data[$conf['user_fields']['email']] = pwg_db_real_escape_string($email);
+	$data[$conf['user_fields']['username']] = pwg_db_real_escape_string($name);
 	
 	mass_updates(USERS_TABLE,
 				array(

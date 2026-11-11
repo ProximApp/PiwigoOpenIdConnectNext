@@ -289,7 +289,7 @@ function oidc_delete_user($user_id)
 {
 	$query = '
 	DELETE FROM '.OIDC_TABLE.'
-	  WHERE `user_id` = '.$user_id.'
+	  WHERE `user_id` = \''.(int)$user_id.'\'
 	;';
 	pwg_query($query);
 }
