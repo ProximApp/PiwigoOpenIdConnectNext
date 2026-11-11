@@ -57,7 +57,11 @@ try {
     if (isset($_SESSION[OIDC_SESSION . '_auth'])) {
         // Create flow
         if ($success && $_SESSION[OIDC_SESSION . '_auth'] === 'create') {
-            $success = oidc_retrieve($oidc, true) !== null;
+            $user_id = oidc_retrieve($oidc, true);
+            $success = $user_id !== null;
+            if ($success) {
+                oidc_update_user($oidc, $user_id);
+            }
         }
 
         if ($success && $oidc->requestUserInfo('sub') !== null) {

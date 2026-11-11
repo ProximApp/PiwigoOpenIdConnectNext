@@ -17,6 +17,10 @@
 
 defined('OIDC_PATH') or die('Hacking attempt!');
 
+// These settings control the authentication of every user, webmasters
+// included: reserved to webmasters, like the installation of plugins
+check_status(ACCESS_WEBMASTER);
+
 // CSRF protection: every form of this page must carry a valid pwg_token
 if (!empty($_POST))
 {
@@ -78,6 +82,7 @@ if ($oidc_test && (isset($_POST['password_test']) || isset($_POST['password_crea
 				// User creation flow
 				$user_id = oidc_retrieve($oidc, true);
 				if ($user_id !== null) {
+					oidc_update_user($oidc, $user_id);
 					$page['infos'][] = l10n('User added to Piwigo!');
 				} else {
 					$page['errors'][] = l10n('A problem occurred during user registration.');

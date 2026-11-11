@@ -172,6 +172,7 @@ function get_preferred_username(OpenIDConnectClient $oidc) {
 
 	// Note: this value must be unique, therefore we use sub
 	$name = $oidc->requestUserInfo('sub');
+	$name = is_string($name) ? $name : '';
 	if (!empty($config['preferred_username'])) {
 		$preferred = $oidc->requestUserInfo($config['preferred_username']);
 		if (is_string($preferred) && $preferred !== '') {
@@ -198,10 +199,21 @@ function oidc_registration_failed($name, array $errors)
 	// Displayed like the errors of Piwigo's register.php (page_errors are not
 	// escaped by the templates)
 	$_SESSION['page_errors'] = array_merge($_SESSION['page_errors'] ?? [], $errors);
-	// error_log() and not trigger_error(): never displayed in the page, even
-	// with display_errors on. The username comes from the provider: control
-	// characters are escaped so that it cannot forge log lines.
-	error_log('OpenIdConnect: registration of user "' . addcslashes((string)$name, "\0..\37\\\"") . '" failed: ' . implode(' / ', $errors));
+	oidc_log('registration of user "' . $name . '" failed: ' . implode(' / ', $errors));
+}
+
+/**
+ * Write a message for the administrator in the PHP error log.
+ *
+ * error_log() and not trigger_error(): never displayed in the page, even with
+ * display_errors on. Messages contain values from the provider: control
+ * characters are escaped so that they cannot forge log lines.
+ *
+ * @param string $message
+ */
+function oidc_log($message)
+{
+	error_log('OpenIdConnect: ' . addcslashes((string)$message, "\0..\37"));
 }
 
 /**
@@ -214,7 +226,13 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 
 	// Fetch user data
 	$sub = $oidc->requestUserInfo('sub');
+	if (!is_string($sub) || $sub === '') {
+		return null;
+	}
 	$email = $oidc->requestUserInfo('email');
+	if (!is_string($email)) {
+		$email = '';
+	}
 	$name = get_preferred_username($oidc);
 
 	// Try to find the resource owner in the OIDC user table
@@ -235,7 +253,7 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 			//  - the username collision check escapes the login a second time,
 			//    so the check is done here on the raw value;
 			//  - the e-mail format check fails (e.g. o\'brien@example.com), so the
-			//    user is registered without e-mail, oidc_login() sets it right after.
+			//    user is registered without e-mail, oidc_update_user() sets it.
 			if (get_userid($name) !== false) {
 				// Username already used by another account
 				oidc_registration_failed($name, [l10n('this login is already used')]);
@@ -273,11 +291,82 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 
 	$row['id'] = (int)$row['id'];
 
-	// Groups registration //
+	return $row['id'];
+}
 
-	// If the group management setting is enabled, synchronize the groups of
-	// the user with the groups claim. The groups are left untouched if the
-	// provider does not return the claim.
+/**
+ * Update the Piwigo user $user_id from the claims of the provider: username,
+ * e-mail and groups (if groups management is enabled).
+ *
+ * Called once the login is accepted. The username and e-mail get the checks
+ * of register_user(), which the provider may not enforce (a user may be able
+ * to edit these claims): values failing them are logged and not applied.
+ */
+function oidc_update_user(OpenIDConnectClient $oidc, $user_id)
+{
+	global $conf;
+	$config = $conf['OIDC'];
+	$user_id = (int)$user_id;
+
+	$row = oidc_get_user_row($user_id);
+	if (empty($row)) {
+		return;
+	}
+
+	$data = [];
+
+	// Without a usable preferred username claim, the username is not changed
+	// (get_preferred_username() falls back to sub, for the registration only)
+	$name = null;
+	if (empty($config['preferred_username'])) {
+		$name = get_preferred_username($oidc);
+	} else {
+		$claim = $oidc->requestUserInfo($config['preferred_username']);
+		if (is_string($claim) && $claim !== '') {
+			$name = $claim;
+		}
+	}
+	if (is_string($name) && $name !== $row['username']) {
+		$owner = get_userid($name);
+		if ($name === '' || trim($name) !== $name || strip_tags($name) !== $name) {
+			oidc_log('username "' . $name . '" of user #' . $user_id . ' not applied: invalid username');
+		} elseif ($owner !== false && (int)$owner !== $user_id) {
+			oidc_log('username "' . $name . '" of user #' . $user_id . ' not applied: already used by user #' . (int)$owner);
+		} else {
+			$data[$conf['user_fields']['username']] = pwg_db_real_escape_string($name);
+		}
+	}
+
+	// An absent or empty e-mail claim keeps the current e-mail
+	$email = $oidc->requestUserInfo('email');
+	if (is_string($email) && $email !== '' && $email !== (string)$row['email']) {
+		$query = '
+SELECT COUNT(*) FROM ' . USERS_TABLE . '
+  WHERE UPPER(' . $conf['user_fields']['email'] . ') = UPPER(\'' . pwg_db_real_escape_string($email) . '\')
+    AND ' . $conf['user_fields']['id'] . ' != ' . $user_id . '
+;';
+		list($count) = pwg_db_fetch_row(pwg_query($query));
+		if (!email_check_format($email)) {
+			oidc_log('e-mail "' . $email . '" of user #' . $user_id . ' not applied: invalid e-mail');
+		} elseif ($count != 0) {
+			oidc_log('e-mail "' . $email . '" of user #' . $user_id . ' not applied: already used by another user');
+		} else {
+			$data[$conf['user_fields']['email']] = pwg_db_real_escape_string($email);
+		}
+	}
+
+	if (!empty($data)) {
+		// mass_updates() does not escape values: they are escaped above
+		mass_updates(
+			USERS_TABLE,
+			['primary' => [$conf['user_fields']['id']], 'update' => array_keys($data)],
+			[[$conf['user_fields']['id'] => $user_id] + $data]
+		);
+	}
+
+	// Groups: synchronized with the groups claim if groups management is
+	// enabled. The groups are left untouched if the provider does not return
+	// the claim.
 	if (!empty($config['manage_groups'])) {
 		// 'group_claim' is the legacy name of the setting
 		$groups_claim = $config['groups_claim'] ?? $config['group_claim'] ?? '';
@@ -287,11 +376,9 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 
 		$groups = $oidc->requestUserInfo($groups_claim);
 		if (is_array($groups)) {
-			oidc_sync_groups($row['id'], $groups);
+			oidc_sync_groups($user_id, $groups);
 		}
 	}
-
-	return $row['id'];
 }
 
 /**
@@ -363,23 +450,6 @@ function oidc_login(OpenIDConnectClient $oidc, $token, $remember_me)
 	}
 
 	$name = get_preferred_username($oidc);
-	$email = $oidc->requestUserInfo('email');
-
-	// Update user data from ID token data
-	$fields = array($conf['user_fields']['email'], $conf['user_fields']['username']);
-
-	// mass_updates() does not escape values, claims returned by the provider must be escaped
-	$data = array();
-	$data[$conf['user_fields']['id']] = (int)$id;
-	$data[$conf['user_fields']['email']] = pwg_db_real_escape_string($email);
-	$data[$conf['user_fields']['username']] = pwg_db_real_escape_string($name);
-	
-	mass_updates(USERS_TABLE,
-				array(
-				'primary' => array($conf['user_fields']['id']),
-				'update' => $fields
-				),
-				array($data));
 
 	// Same checks as the core pwg_login(): no guest account
 	$user_found = oidc_get_user_row($id);
@@ -402,6 +472,9 @@ function oidc_login(OpenIDConnectClient $oidc, $token, $remember_me)
 		trigger_notify('login_failure_before_log_user', $name);
 		return false;
 	}
+
+	// The login is accepted: update the user from the provider claims
+	oidc_update_user($oidc, $id);
 
 	// Log the user in, unless a plugin handles log_user() itself
 	// Remember-me is disabled: auto_login() would restore a session without
@@ -477,6 +550,9 @@ function oidc_logout()
 
 	// Webservice: answer with an error instead of an HTML redirection
 	if (script_basename() == 'ws') {
+		// $service is a global when ws_init.inc.php was already included
+		// (pwg.images.uploadAsync, or from a webservice method)
+		global $service;
 		include_once(PHPWG_ROOT_PATH . 'include/ws_init.inc.php');
 		$service->sendResponse(new PwgError(401, 'Session expired, please log in again'));
 		exit();

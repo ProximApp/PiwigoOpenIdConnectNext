@@ -62,6 +62,8 @@ function oidc_validate_api_token($oidc, $access_token)
     if (isset($introspection->aud)) {
         $audiences = array_merge($audiences, (array)$introspection->aud);
     }
+    // Values of another type (malformed response) are ignored
+    $audiences = array_filter($audiences, 'is_string');
     if (empty(array_intersect($audiences, $allowed_clients))) {
         return null;
     }
