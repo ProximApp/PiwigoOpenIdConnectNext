@@ -2,29 +2,30 @@
 	<h2>OpenID Connect</h2>
 </div>
 
-<form method="post" action="" id="test_auth" target="_blank"></form>
-<form method="post" action="" id="test_pass"></form>
+<form method="post" action="" id="test_auth" target="_blank"><input type="hidden" name="pwg_token" value="{$PWG_TOKEN|escape:html}"></form>
+<form method="post" action="" id="test_pass"><input type="hidden" name="pwg_token" value="{$PWG_TOKEN|escape:html}"></form>
 
 
 <div id="configContent">
 <form method="post" action="" class="properties">
+<input type="hidden" name="pwg_token" value="{$PWG_TOKEN|escape:html}">
 <fieldset id="mainConf">
     <legend>{'OpenID Connect settings'|translate}</legend>
 	<ul>
 		<li>
 			<label for="issuer_url">{'Issuer URL'|translate}</label>
 			<br />
-			<input type="text" size=50 name="issuer_url" id="issuer_url" value="{$issuer_url}">
+			<input type="text" size=50 name="issuer_url" id="issuer_url" value="{$issuer_url|escape:html}">
 		</li>
 		<li>
 			<label for="client_id">{'Client ID'|translate}</label>
 			<br />
-			<input type="text" name="client_id" id="client_id" value="{$client_id}">
+			<input type="text" name="client_id" id="client_id" value="{$client_id|escape:html}">
 		</li>
 		<li>
 			<label for="client_secret">{'Client secret'|translate}</label>
 			<br />
-			<input type="text" name="client_secret" id="client_secret" value="{$client_secret}">
+			<input type="text" name="client_secret" id="client_secret" value="{$client_secret|escape:html}">
 		</li>
 	</ul>
 	<i>{'Additional settings are detected through the .well-known/openid-configuration file from the issuer.'|translate}</i>
@@ -34,7 +35,13 @@
     <legend>{'Test OpenID connection'|translate}</legend>
 	<ul>
 		<li>
-			<i style="display:inline-block;max-width:30rem;line-height:normal">{'Enabling a flow disables non-OpenID Connect account login. Please test your flow before enabling and make sure at least one OpenID Connect account has webmaster access rights. In case of failure, any config can be overridden by the conf.php found in the plugin folder.'|translate}</i>
+			<i style="display:inline-block;max-width:30rem;line-height:normal">{'Enabling a flow disables non-OpenID Connect account login. Please test your flow before enabling and make sure at least one OpenID Connect account has webmaster access rights. In case of failure, any setting can be overridden in a conf.php file in the plugin folder (copy conf.php.dist).'|translate}</i>
+		</li>
+		<li>
+			<i style="display:inline-block;max-width:30rem;line-height:normal">{'The tests use the saved settings: save the settings before testing.'|translate}</i>
+		</li>
+		<li id="oidc_unsaved" hidden>
+			<strong style="color:#c00">{'The settings have unsaved changes: save them before testing.'|translate}</strong>
 		</li>
 		<li>
 			<input form="test_auth" type="submit" name="authorization_test" value="{'Test authorization code flow'|translate}">
@@ -45,12 +52,12 @@
 		<li>
 			<label for="password_test_user">{'Username'|translate}</label>
 			<br />
-			<input form="test_pass" type="text" name="password_test_user" id="password_test_user" value="{$password_test_user}">
+			<input form="test_pass" type="text" name="password_test_user" id="password_test_user" value="{$password_test_user|escape:html}">
 		</li>
 		<li>
 			<label for="password_test_pass">{'Password'|translate}</label>
 			<br />
-			<input form="test_pass" type="password" name="password_test_pass" id="password_test_pass" value="{$password_test_pass}">
+			<input form="test_pass" type="password" name="password_test_pass" id="password_test_pass" value="{$password_test_pass|escape:html}">
 		</li>
 		<li>
 			<input form="test_pass" type="submit" name="password_test" value="{'Test resource owner credentials flow'|translate}">
@@ -61,7 +68,7 @@
 
 <fieldset id="mainConf">
     <legend>{'Authorization Code Flow'|translate}</legend>
-	<i style="display:inline-block;max-width:30rem">Please register '{$redirect_url}' as the redirect URL with your OpenID Provider.</i>
+	<i style="display:inline-block;max-width:30rem">Please register '{$redirect_url|escape:html}' as the redirect URL with your OpenID Provider.</i>
 	<ul>
 		<li>
 			<input type="checkbox" name="authorization_code_flow" id="authorization_code_flow" {if $authorization_code_flow}checked="checked"{/if}>
@@ -83,12 +90,29 @@
 		<li>
 			<label for="password_reset_url">{'Password reset URL'|translate}</label>
 			<br />
-			<input type="text" size=50 name="password_reset_url" id="password_reset_url" value="{$password_reset_url}">
+			<input type="text" size=50 name="password_reset_url" id="password_reset_url" value="{$password_reset_url|escape:html}">
 		</li>
 		<li>
 			<label for="registration_url">{'Registration URL'|translate}</label>
 			<br />
-			<input type="text" size=50 name="registration_url" id="registration_url" value="{$registration_url}">
+			<input type="text" size=50 name="registration_url" id="registration_url" value="{$registration_url|escape:html}">
+		</li>
+	</ul>
+</fieldset>
+
+<fieldset id="mainConf">
+    <legend>{'Local login'|translate}</legend>
+	<i style="display:inline-block;max-width:30rem">{'When a flow is enabled, local Piwigo passwords are disabled. As a fallback, webmasters can be allowed to log in with their local password on the Piwigo login page only (never through the API):'|translate} {$local_login_url|escape:html}</i>
+	<ul>
+		<li>
+			<input type="checkbox" name="local_webmaster_login" id="local_webmaster_login" {if $local_webmaster_login|default:false}checked="checked"{/if}>
+			<label for="local_webmaster_login">{'Allow webmasters to log in with their local password'|translate}</label>
+		</li>
+		<li>
+			<input type="checkbox" name="apply_login_checks" id="apply_login_checks" {if !isset($apply_login_checks) || $apply_login_checks}checked="checked"{/if}>
+			<label for="apply_login_checks">{'Apply the login checks of other plugins (2FA, account lockout...) to OpenID Connect users'|translate}</label>
+			<br />
+			<i style="display:inline-block;max-width:30rem">{'Warning: a two-factor authentication plugin expecting a code in the login form will block OpenID Connect logins. Disable this option if multi-factor authentication is handled by your provider.'|translate}</i>
 		</li>
 	</ul>
 </fieldset>
@@ -129,12 +153,12 @@
 		<li>
 			<label for="scope">{'Scopes'|translate}</label>
 			<br />
-			<input type="text" size=50 name="scope" id="scope" value="{$scope}">
+			<input type="text" size=50 name="scope" id="scope" value="{$scope|escape:html}">
 		</li>
 		<li>
 			<label for="preferred_username">{'Preferred username'|translate}</label>
 			<br />
-			<input type="text" size=50 name="preferred_username" id="preferred_username" value="{$preferred_username}">
+			<input type="text" size=50 name="preferred_username" id="preferred_username" value="{$preferred_username|escape:html}">
 			<br />
 			<i>{'This claim is used for local identification and must return a unique value for each user. Falls back to \'sub\'.'|translate}</i>
 		</li>
@@ -145,19 +169,19 @@
 		<li>
 			<label for="groups_claim">{'Groups claim'|translate}</label>
 			<br />
-			<input type="text" size=50 name="groups_claim" id="groups_claim" value="{$groups_claim|default:''}">
+			<input type="text" size=50 name="groups_claim" id="groups_claim" value="{$groups_claim|default:''|escape:html}">
 			<br />
 			<i>{'When groups management is enabled, groups are added to users upon connection. Groups claim is used to create and assign groups to users. This claim should be an array of [group_name]. The claim falls back to \'groups\'.'|translate}</i>
 		</li>
 		<li>
 			<label for="proxy">{'HTTP Proxy'|translate}</label>
 			<br />
-			<input type="text" size=50 name="proxy" id="proxy" value="{$proxy}">
+			<input type="text" size=50 name="proxy" id="proxy" value="{$proxy|escape:html}">
 		</li>
 		<li>
 			<label for="authparam">{'Authentication parameters'|translate}</label>
 			<br />
-			<input type="text" size=50 name="authparam" id="authparam" value="{$authparam}">
+			<input type="text" size=50 name="authparam" id="authparam" value="{$authparam|escape:html}">
 			<br />
 			<i>{'Please provide parameters in a JSON array.'|translate}</i>
 		</li>
@@ -167,6 +191,32 @@
 <p style="text-align:left;"><input type="submit" name="save_config" value="{'Save Settings'|translate}"></p>
 </form>
 </div>
+
+{footer_script}{literal}
+// The tests use the saved settings: block them while the settings form has
+// unsaved changes (the test inputs, attached to the test forms, are ignored)
+(function () {
+	var settings = document.querySelector('#configContent form.properties');
+	var dirty = false;
+	var markDirty = function (e) {
+		if (e.target.form === settings) {
+			dirty = true;
+		}
+	};
+	settings.addEventListener('input', markDirty);
+	settings.addEventListener('change', markDirty);
+	['test_auth', 'test_pass'].forEach(function (id) {
+		document.getElementById(id).addEventListener('submit', function (e) {
+			if (dirty) {
+				e.preventDefault();
+				var warning = document.getElementById('oidc_unsaved');
+				warning.hidden = false;
+				warning.scrollIntoView({block: 'center'});
+			}
+		});
+	});
+})();
+{/literal}{/footer_script}
 
 <div style="text-align:right;">
   Developed by Jasper Weyne

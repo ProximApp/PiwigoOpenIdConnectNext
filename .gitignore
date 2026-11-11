@@ -1,1 +1,7 @@
 /vendor/
+.DS_Store
+/OpenIdConnect/
+/OpenIdConnect.zip
+/build/
+/dev/
+/conf.php

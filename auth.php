@@ -16,6 +16,7 @@
 */
 
 define('PHPWG_ROOT_PATH', '../../');
+define('OIDC_AUTH_PAGE', true);
 
 require_once(PHPWG_ROOT_PATH.'include/common.inc.php');
 require_once(OIDC_PATH . 'oidc.php');
@@ -56,7 +57,11 @@ try {
     if (isset($_SESSION[OIDC_SESSION . '_auth'])) {
         // Create flow
         if ($success && $_SESSION[OIDC_SESSION . '_auth'] === 'create') {
-            $success = oidc_retrieve($oidc, true) !== null;
+            $user_id = oidc_retrieve($oidc, true);
+            $success = $user_id !== null;
+            if ($success) {
+                oidc_update_user($oidc, $user_id);
+            }
         }
 
         if ($success && $oidc->requestUserInfo('sub') !== null) {
@@ -69,21 +74,25 @@ try {
     }
 
     // Authentication flow
-    if ($success) {
-        oidc_login($oidc, $oidc->getTokenResponse(), false);
+    if ($success && oidc_login($oidc, $oidc->getTokenResponse(), false)) {
+        // Interactive login, equivalent to identification.php
+        $_SESSION['connected_with'] = 'pwg_ui';
     } else {
-        $_SESSION['page_warnings'][] = l10n('Login not successful, try again.');
+        // An error: the gallery themes do not display warnings
+        $_SESSION['page_errors'][] = l10n('Login not successful, try again.');
     }
 } catch (\Exception $e) {
     // Test flow
     if (isset($_SESSION[OIDC_SESSION . '_auth'])) {
         unset($_SESSION[OIDC_SESSION . '_auth']);
-        echo $e->getMessage();
+        // Exception messages may contain attacker-controlled data (e.g. error_description from the query string)
+        echo htmlspecialchars($e->getMessage());
         exit;
     }
 
     // Authentication flow
-    $_SESSION['page_errors'][] = $e->getMessage();
+    // page_errors are rendered without escaping by Piwigo templates
+    $_SESSION['page_errors'][] = htmlspecialchars($e->getMessage());
 }
 
 redirect(get_gallery_home_url());

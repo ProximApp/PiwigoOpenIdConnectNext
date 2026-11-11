@@ -17,6 +17,10 @@
 
 defined('OIDC_PATH') or die('Hacking attempt!');
 
+// Copy this file to conf.php and uncomment the settings to override: they take
+// precedence over the settings of the admin page. conf.php is not part of the
+// plugin package, so plugin updates keep it.
+
 return [
     // 'issuer_url' => '',
     // 'client_id' => '',
@@ -24,7 +28,7 @@ return [
     // 'scope' => '',
     // 'preferred_username' => '',
     // 'manage_groups' => false,
-    // 'group_claim' => '',
+    // 'groups_claim' => '',
     // 'proxy' => '',
     // 'verify_host' => false,
     // 'verify_peer' => false,
@@ -37,6 +41,19 @@ return [
     // 'password_flow' => false,
     // 'password_reset_url' => '',
     // 'registration_url' => '',
+    // Allow webmasters to log in with their local Piwigo password through
+    // identification.php?oidc_local=1 while a flow is enabled (never through the API)
+    // Redirect URL sent to the provider, default: <Piwigo URL>/plugins/OpenIdConnect/auth.php
+    // Set it when Piwigo is behind a reverse proxy which changes the URL
+    // 'redirect_url' => '',
+    // 'local_webmaster_login' => false,
+    // Run the finalize_login checks of other plugins (2FA, account lockout...)
+    // for OpenID Connect logins too
+    // 'apply_login_checks' => true,
+    // Client IDs, other than client_id, whose access tokens are accepted by the
+    // pwg.session.login_oidc API method (e.g. a mobile application registered
+    // as a separate client with the same provider).
+    // 'api_trusted_client_ids' => [],
 ];
 
 ?>

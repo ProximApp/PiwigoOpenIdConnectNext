@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: OpenId Connect
-Version: 2.0.4
+Version: 2.1.0
 Description: This plugin provides OpenID Connect integration.
 Plugin URI: https://piwigo.org/ext/index.php?eid=1049
 Author: ProximApp (originally Jasper Weyne)
@@ -88,7 +88,8 @@ function is_token_unexpired($access_token, $oidc): bool
 /// Event handlers
 /**
  * Deserialize the database-stored contents of plugin settings
- * Override them with contents of conf.php
+ * Override them with contents of conf.php (not shipped, so that plugin updates
+ * keep it: copy conf.php.dist)
  */
 function oidc_init()
 {
@@ -97,7 +98,22 @@ function oidc_init()
 
 	if (file_exists(OIDC_PATH . 'conf.php')) {
 		$overrideConfig = (include OIDC_PATH . 'conf.php');
-		$conf['OIDC'] = array_merge($conf['OIDC'], $overrideConfig);
+		if (is_array($overrideConfig)) {
+			$conf['OIDC'] = array_merge($conf['OIDC'], $overrideConfig);
+		}
+	}
+
+	// auth.php must not be replaced by the "no photo yet" page of empty
+	// galleries (only for this request, nothing is saved)
+	if (defined('OIDC_AUTH_PAGE')) {
+		$conf['no_photo_yet'] = 'false';
+	}
+
+	// When OpenID Connect is enforced, disable the core password login
+	// (identification.php, pwg.session.login, pwg.images.uploadAsync).
+	// The webmaster fallback calls pwg_login() itself, see password_login().
+	if (oidc_enforced()) {
+		remove_event_handler('try_log_user', 'pwg_login');
 	}
 }
 
@@ -119,10 +135,11 @@ function oidc_profile()
 function override_login_link()
 {
 	global $template;
+	global $conf;
 
 	// If U_LOGIN is present and authorization grant is enabled, replace U_LOGIN link
 	if ($template->get_template_vars('U_LOGIN') !== null && can_authorization_grant())
-		$template->assign('U_LOGIN', OIDC_PATH . 'auth.php');
+		$template->assign('U_LOGIN', oidc_auth_url());
 
 	// If resource owner credentials grant is enabled, set U_REGISTER to registration url
 	if (can_resource_owner_credentials_grant()) {
@@ -141,7 +158,13 @@ function oidc_identification()
 	global $template;
 	global $conf;
 
-	redirect_auth();
+	// The local login form stays reachable for the webmaster fallback,
+	// with identification.php?oidc_local=1
+	$local_form = oidc_local_webmaster_login_enabled()
+		&& (isset($_GET['oidc_local']) || isset($_POST['login']));
+	if (!$local_form) {
+		redirect_auth();
+	}
 
 	if (can_resource_owner_credentials_grant()) {
 		if ($template->get_template_vars('U_LOST_PASSWORD') !== null) {
@@ -175,31 +198,51 @@ function oidc_redirect()
 }
 
 /**
- * Refresh the user, log out if expired
+ * Check the session of the logged in user on every request, refresh the
+ * OpenID Connect token if needed, log out if expired.
+ *
+ * Fails closed: when OpenID Connect is enforced, a logged in session without
+ * OpenID Connect token is logged out, except for the explicitly allowed
+ * authentication contexts.
  */
 function refresh_login($user)
 {
 	global $conf;
 
-	// If disabled, don't attempt to refresh
-	if (!can_authorization_grant() && !can_resource_owner_credentials_grant()) {
+	if (!oidc_enforced()) {
 		return;
 	}
 
-	// If user is not logged in, don't attempt to refresh
+	// Guest: nothing to check
 	if ($user['id'] == $conf['guest_id']) {
 		return;
 	}
 
-	// Retrieve access token for current session
-	$json = $_SESSION[OIDC_SESSION];
+	// Allowed authentication contexts without OpenID Connect token:
+	// - API key in the X-PIWIGO-API header (stateless, no session),
+	// - API key used with pwg.session.login,
+	// - authentication keys (?auth= links sent by e-mail, created by admins)
+	if (defined('PWG_API_KEY_REQUEST')) {
+		return;
+	}
+	$connected_with = $_SESSION['connected_with'] ?? null;
+	if (in_array($connected_with, ['api_key', 'auth_key', 'ws_session_login_api_key'], true)) {
+		return;
+	}
 
-	// If no access token was found, reject the refresh
-	if (!$json) {
+	if (empty($_SESSION[OIDC_SESSION])) {
+		// Webmaster local login fallback
+		if (oidc_local_session_allowed($user)) {
+			return;
+		}
 		oidc_logout();
 	}
 
-	$accessToken = json_decode($json);
+	// The token must belong to the logged in user
+	$accessToken = json_decode($_SESSION[OIDC_SESSION]);
+	if (!is_object($accessToken) || !isset($accessToken->uid) || (int)$accessToken->uid !== (int)$user['id']) {
+		oidc_logout();
+	}
 
 	// If the token is not expired, refreshing isn't necessary
 	$oidc = get_oidc_client();
@@ -207,28 +250,39 @@ function refresh_login($user)
 		return;
 	}
 
+	if (empty($accessToken->refresh_token)) {
+		oidc_logout();
+	}
+
 	// Try to obtain refreshed access token
 	try {
 		$response = $oidc->refreshToken($accessToken->refresh_token);
+		if (!isset($response->access_token)) {
+			oidc_logout();
+		}
+		$accessToken->access_token = $response->access_token;
 		if (isset($response->refresh_token)) {
 			$accessToken->refresh_token = $response->refresh_token;
 		}
-		if (isset($response->access_token)) {
-			$accessToken->access_token = $response->access_token;
-		}
 		if (isset($response->expires_in)) {
 			$accessToken->expires = time() + $response->expires_in;
+		} else {
+			unset($accessToken->expires);
 		}
 		$_SESSION[OIDC_SESSION] = json_encode($accessToken);
 	} catch (\Exception $e) {
 		// Log out if an unknown problem arises
-		$page['errors'][] = $e->getMessage();
 		oidc_logout();
 	}
 }
 
 /**
- * Use the given input to begin the resource owner credentials flow
+ * try_log_user handler: resource owner credentials flow, and local login
+ * fallback for webmasters.
+ *
+ * When OpenID Connect is enforced, the core pwg_login handler is removed
+ * (see oidc_init()), so local passwords are not checked at all, except for
+ * the webmaster fallback.
  */
 function password_login($success, $username, $password, $remember_me)
 {
@@ -237,26 +291,39 @@ function password_login($success, $username, $password, $remember_me)
 		return true;
 	}
 
-	// If resource owner credentials flow is disable, don't attempt
-	if (!can_resource_owner_credentials_grant()) {
+	// Not enforced: the core pwg_login handler already did the job
+	if (!oidc_enforced()) {
 		return false;
 	}
 
-	// Begin login attempt
-	$success = false;
+	// Webmaster local login fallback, only through the Piwigo login page
+	// ($username and $password are still escaped by Piwigo, as pwg_login expects)
+	if (oidc_local_webmaster_login_enabled() && script_basename() == 'identification') {
+		$found = find_user_by_username_or_email($username);
+		if (($found['status'] ?? null) === 'webmaster' && pwg_login(false, $username, $password, $remember_me)) {
+			return true;
+		}
+	}
+
+	if (!can_resource_owner_credentials_grant()) {
+		trigger_notify('login_failure', stripslashes($username));
+		return false;
+	}
 
 	// Try to request token with auth params
+	// Piwigo addslashes() the request parameters, the provider needs the raw values
+	$success = false;
 	$oidc = get_oidc_client();
 	$oidc->addAuthParam([
-		'username' => $username,
-		'password' => $password,
+		'username' => stripslashes($username),
+		'password' => stripslashes($password),
 	]);
 
 	try {
 		$response = $oidc->requestResourceOwnerToken(true);
 		if (isset($response->access_token)) {
 			$oidc->setAccessToken($response->access_token);
-			$success = oidc_login($oidc, $response, $remember_me);
+			$success = oidc_login($oidc, $response, false);
 		}
 	} catch (\Exception $e) {
 		// silently fail
@@ -289,7 +356,7 @@ function oidc_delete_user($user_id)
 {
 	$query = '
 	DELETE FROM '.OIDC_TABLE.'
-	  WHERE `user_id` = '.$user_id.'
+	  WHERE `user_id` = \''.(int)$user_id.'\'
 	;';
 	pwg_query($query);
 }
