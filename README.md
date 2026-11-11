@@ -28,10 +28,47 @@ unzip it to the /plugins folder within your Piwigo installation. Enable the
 plugin from Piwigo (it should be visible), and configure the plugin through the
 admin. Test that your installation is functional before enabling a flow.
 
+## Configuration
+
+1. At your provider, create a confidential client (with a client secret) and
+   register the redirect URL displayed in the *Authorization Code Flow*
+   section of the plugin admin page:
+   `https://<piwigo>/plugins/OpenIdConnect/auth.php`.
+2. In the plugin admin page, enter the **Issuer URL** (the base URL of the
+   provider, without `/.well-known/openid-configuration`: the plugin finds the
+   provider settings there automatically), the client ID and the client secret.
+3. **Save the settings**, then use *Test authorization code flow*. The tests use
+   the saved settings, not the values being edited.
+4. Use *Create user with authorization code flow* to create your own account,
+   give it the webmaster status in Piwigo, and only then enable the
+   authorization code flow (or enable the webmaster local login, see below).
+
+### Pocket ID
+
+Tested with [Pocket ID](https://pocket-id.org) 1.16:
+
+| Setting            | Value                                                     |
+|--------------------|-----------------------------------------------------------|
+| Issuer URL         | `https://login.example.com` (your Pocket ID URL)          |
+| Client             | *OIDC Clients* > *Add OIDC Client*, not public, callback URL `https://<piwigo>/plugins/OpenIdConnect/auth.php` |
+| Scopes             | `openid profile email groups`                             |
+| Preferred username | `preferred_username`                                      |
+| Groups claim       | `groups` (with *Enable groups management*)                |
+| Flow               | Authorization code flow only: Pocket ID does not support the resource owner credentials (password) flow |
+
+Known limitations with Pocket ID 1.16:
+
+- a user *disabled* in Pocket ID can still log in, and existing sessions stay
+  valid, because Pocket ID keeps issuing tokens for disabled users. Delete the
+  user in Pocket ID to revoke their access;
+- `api_trusted_client_ids` has no effect (see *Login through the API*).
+
 ## Change the configuration from conf.php
 
 If OIDC is enabled, and you need to login using a non-oidc account, you can change the value of `authorization_code_flow` or
 `password_flow` to false in conf.php file.
+
+
 
 ## Local accounts when a flow is enabled
 
