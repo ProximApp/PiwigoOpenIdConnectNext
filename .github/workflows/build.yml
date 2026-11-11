@@ -1,0 +1,53 @@
+name: Build
+on:
+  pull_request:
+    types: [opened, edited, ready_for_review, synchronize]
+  push:
+    branches:
+      - main
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # upload of the zip to the release
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # The release tag (v2.1.0 or 2.1.0) must match the Version: header of
+      # main.inc.php, displayed by Piwigo and the extension library
+      - name: Check the version
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION=$(sed -n 's/^Version: *//p' main.inc.php | tr -d '\r')
+          if [ "${TAG#v}" != "$VERSION" ]; then
+            echo "::error::Tag $TAG does not match the version of main.inc.php ($VERSION)"
+            exit 1
+          fi
+
+      # ubuntu-latest provides git, php, composer and zip
+      - name: Build
+        run: sh build-release.sh
+
+      # The artifact contains the OpenIdConnect/ directory, ready to be
+      # unzipped in the plugins/ directory of Piwigo
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenIdConnect
+          path: |
+            build/
+            !build/OpenIdConnect.zip
+
+      # Attached as OpenIdConnect.zip, so that the last release is always at
+      # releases/latest/download/OpenIdConnect.zip
+      - name: Attach the zip to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" build/OpenIdConnect.zip --clobber
