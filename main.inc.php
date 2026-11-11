@@ -100,6 +100,12 @@ function oidc_init()
 		$conf['OIDC'] = array_merge($conf['OIDC'], $overrideConfig);
 	}
 
+	// auth.php must not be replaced by the "no photo yet" page of empty
+	// galleries (only for this request, nothing is saved)
+	if (defined('OIDC_AUTH_PAGE')) {
+		$conf['no_photo_yet'] = 'false';
+	}
+
 	// When OpenID Connect is enforced, disable the core password login
 	// (identification.php, pwg.session.login, pwg.images.uploadAsync).
 	// The webmaster fallback calls pwg_login() itself, see password_login().
@@ -126,10 +132,11 @@ function oidc_profile()
 function override_login_link()
 {
 	global $template;
+	global $conf;
 
 	// If U_LOGIN is present and authorization grant is enabled, replace U_LOGIN link
 	if ($template->get_template_vars('U_LOGIN') !== null && can_authorization_grant())
-		$template->assign('U_LOGIN', OIDC_PATH . 'auth.php');
+		$template->assign('U_LOGIN', oidc_auth_url());
 
 	// If resource owner credentials grant is enabled, set U_REGISTER to registration url
 	if (can_resource_owner_credentials_grant()) {

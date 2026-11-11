@@ -16,6 +16,7 @@
 */
 
 define('PHPWG_ROOT_PATH', '../../');
+define('OIDC_AUTH_PAGE', true);
 
 require_once(PHPWG_ROOT_PATH.'include/common.inc.php');
 require_once(OIDC_PATH . 'oidc.php');

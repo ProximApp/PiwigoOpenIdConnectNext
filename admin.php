@@ -41,9 +41,10 @@ if (isset($_POST['password_test']) || isset($_POST['password_create']))
 {
 	// Build a token request
 	$oidc = get_oidc_client();
+	// Piwigo addslashes() the request parameters, the provider needs the raw values
 	$oidc->addAuthParam([
-		'username' => $_POST['password_test_user'],
-		'password' => $_POST['password_test_pass'],
+		'username' => stripslashes($_POST['password_test_user'] ?? ''),
+		'password' => stripslashes($_POST['password_test_pass'] ?? ''),
 	]);
 
 	// Try to perform token request
@@ -79,34 +80,41 @@ if (isset($_POST['password_test']) || isset($_POST['password_create']))
 // Save settings form
 if (isset($_POST['save_config']))
 {
+	// Piwigo addslashes() the request parameters: store the raw values
+	$text = function ($name) {
+		return trim(stripslashes($_POST[$name] ?? ''));
+	};
 	$conf['OIDC'] = [
-		'issuer_url' => $_POST['issuer_url'], 
-		'client_id' => $_POST['client_id'], 
-		'client_secret' => $_POST['client_secret'], 
+		'issuer_url' => $text('issuer_url'),
+		'client_id' => $text('client_id'),
+		'client_secret' => $text('client_secret'),
 		// We want to save password_test_user and password_test_pass
 		// to prevent PHP from raising an error
 		// We reset the two values as they may contains sensitive data
-		'password_test_user' => '', 
-		'password_test_pass' => '', 
-		'scope' => $_POST['scope'], 
-		'preferred_username' => $_POST['preferred_username'], 
-		'manage_groups' => $_POST['manage_groups'], 
-		'groups_claim' => $_POST['groups_claim'], 
-		'proxy' => $_POST['proxy'], 
-		'verify_host' => isset($_POST['verify_host']), 
-		'verify_peer' => isset($_POST['verify_peer']), 
-		'authparam' => $_POST['authparam'], 
-		'register_new_users' => isset($_POST['register_new_users']), 
-		'redirect_new_to_profile' => isset($_POST['redirect_new_to_profile']), 
+		'password_test_user' => '',
+		'password_test_pass' => '',
+		'scope' => $text('scope'),
+		'preferred_username' => $text('preferred_username'),
+		'manage_groups' => isset($_POST['manage_groups']),
+		'groups_claim' => $text('groups_claim'),
+		'proxy' => $text('proxy'),
+		'verify_host' => isset($_POST['verify_host']),
+		'verify_peer' => isset($_POST['verify_peer']),
+		'authparam' => $text('authparam'),
+		'register_new_users' => isset($_POST['register_new_users']),
+		'redirect_new_to_profile' => isset($_POST['redirect_new_to_profile']),
 		'notify_admins_on_register' => isset($_POST['notify_admins_on_register']),
-		'notify_user_on_register' => isset($_POST['notify_user_on_register']), 
-		'authorization_code_flow' => isset($_POST['authorization_code_flow']), 
-		'password_flow' => isset($_POST['password_flow']), 
-		'password_reset_url' => $_POST['password_reset_url'], 
-		'registration_url' => $_POST['registration_url'],
+		'notify_user_on_register' => isset($_POST['notify_user_on_register']),
+		'authorization_code_flow' => isset($_POST['authorization_code_flow']),
+		'password_flow' => isset($_POST['password_flow']),
+		'password_reset_url' => $text('password_reset_url'),
+		'registration_url' => $text('registration_url'),
 		'local_webmaster_login' => isset($_POST['local_webmaster_login']),
 		'apply_login_checks' => isset($_POST['apply_login_checks']),
 	];
+	if ($conf['OIDC']['authparam'] !== '' && !is_array(json_decode($conf['OIDC']['authparam'], true))) {
+		$page['errors'][] = l10n('Authentication parameters must be a JSON object, they are ignored.');
+	}
 
 	conf_update_param('OIDC', $conf['OIDC']);
 	$page['infos'][] = l10n('Settings saved.');
@@ -123,7 +131,7 @@ if (!$conf['allow_user_registration'] && $conf['OIDC']['register_new_users']) {
 // Render page
 $template->assign($conf['OIDC']);
 $template->assign([
-	'redirect_url' => embellish_url(get_absolute_root_url() . OIDC_PATH . 'auth.php'),
+	'redirect_url' => oidc_redirect_url(),
 	'PWG_TOKEN' => get_pwg_token(),
 	'local_login_url' => get_absolute_root_url() . 'identification.php?oidc_local=1',
 ]);

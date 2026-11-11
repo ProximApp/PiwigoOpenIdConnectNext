@@ -36,8 +36,12 @@ function get_oidc_client() {
 	);
 
 	// Set verification bits
-	$oidc->setVerifyHost($config['verify_host']);
-	$oidc->setVerifyPeer($config['verify_peer']);
+	$oidc->setVerifyHost(!empty($config['verify_host']));
+	$oidc->setVerifyPeer(!empty($config['verify_peer']));
+
+	// The library builds the redirect URL from SERVER_PORT by default, which
+	// is wrong behind a reverse proxy or a port mapping
+	$oidc->setRedirectURL(oidc_redirect_url());
 
 	// Set HTTP proxy
 	if (!empty($config['proxy'])) {
@@ -45,14 +49,34 @@ function get_oidc_client() {
 	}
 
 	// Set auth params
-	if ($array = json_decode($config['authparam'], true) !== null) {
-		$oidc->addAuthParam($array);
+	$authparam = json_decode($config['authparam'] ?? '', true);
+	if (is_array($authparam)) {
+		$oidc->addAuthParam($authparam);
 	}
 
 	// Set scopes
-	$oidc->addScope(explode(' ', $config['scope']));
+	$oidc->addScope(array_values(array_filter(explode(' ', $config['scope'] ?? ''))));
 
 	return $oidc;
+}
+
+/**
+ * URL of auth.php, the redirect URL to register with the provider.
+ * Can be overridden with 'redirect_url' in conf.php (e.g. behind a reverse proxy).
+ */
+function oidc_redirect_url() {
+	global $conf;
+	if (!empty($conf['OIDC']['redirect_url'])) {
+		return $conf['OIDC']['redirect_url'];
+	}
+	return get_absolute_root_url() . 'plugins/' . OIDC_ID . '/auth.php';
+}
+
+/**
+ * Relative URL of auth.php, from the current page
+ */
+function oidc_auth_url() {
+	return get_root_url() . 'plugins/' . OIDC_ID . '/auth.php';
 }
 
 /**
@@ -104,7 +128,7 @@ function oidc_local_session_allowed($user) {
 function redirect_auth()
 {
 	if (can_authorization_grant()) {
-		redirect(OIDC_PATH . 'auth.php');
+		redirect(oidc_auth_url());
 		return true;
 	}
 
@@ -121,8 +145,11 @@ function get_preferred_username(OpenIDConnectClient $oidc) {
 
 	// Note: this value must be unique, therefore we use sub
 	$name = $oidc->requestUserInfo('sub');
-	if (!empty($config['preferred_username'] && $preferred = $oidc->requestUserInfo($config['preferred_username']))) {
-		$name = $preferred;
+	if (!empty($config['preferred_username'])) {
+		$preferred = $oidc->requestUserInfo($config['preferred_username']);
+		if (is_string($preferred) && $preferred !== '') {
+			$name = $preferred;
+		}
 	}
 
 	return $name;
@@ -221,61 +248,78 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 
 	// Groups registration //
 
-	// If the group management setting is enabled, add the user to the configured groups
-	if ($config['manage_groups']) {
-
-		$groups_claim = "groups";
-		if (!empty($config['groups_claim'])) {
-			$groups_claim = $config['groups_claim'];
+	// If the group management setting is enabled, synchronize the groups of
+	// the user with the groups claim. The groups are left untouched if the
+	// provider does not return the claim.
+	if (!empty($config['manage_groups'])) {
+		// 'group_claim' is the legacy name of the setting
+		$groups_claim = $config['groups_claim'] ?? $config['group_claim'] ?? '';
+		if ($groups_claim === '') {
+			$groups_claim = 'groups';
 		}
 
-		// Remove existing groups
-		$query = '
-			DELETE FROM ' . USER_GROUP_TABLE . '
-			WHERE `user_id` = ' . $row['id'] . ';';
-		pwg_query($query);
-
-		// Get the groups array provided by the oidc provider
 		$groups = $oidc->requestUserInfo($groups_claim);
-
-		foreach ($groups as $group_name)
-		{
-			// Check if expected group exists
-			$query = '
-				SELECT id FROM `'.GROUPS_TABLE.'`
-				WHERE name = \'' . pwg_db_real_escape_string($group_name) . '\'';
-
-			$group_row = pwg_db_fetch_assoc(pwg_query($query));
-
-			// The group does not exist, we need to create it
-			if (empty($group_row['id'])) {
-
-				// creating the group, see line 82 gallery/include/ws_functions/pwg.groups.php
-				single_insert(
-					GROUPS_TABLE,
-					array(
-						'name' => pwg_db_real_escape_string($group_name),
-						'is_default' => boolean_to_string(false),
-					)
-				);
-				$inserted_id = pwg_db_insert_id();
-				
-				$group_id = $inserted_id;
-			} else {
-				// The group exists, we just need its id
-				$group_id = $group_row['id'];
-			}
-
-			// Add the user to the group
-			single_insert(USER_GROUP_TABLE, [
-				'user_id' => $row['id'],
-				'group_id' => $group_id,
-			]);
+		if (is_array($groups)) {
+			oidc_sync_groups($row['id'], $groups);
 		}
-		
 	}
 
 	return $row['id'];
+}
+
+/**
+ * Make $group_names the groups of the user $user_id, creating missing groups
+ */
+function oidc_sync_groups($user_id, array $group_names)
+{
+	$group_ids = [];
+	foreach ($group_names as $group_name) {
+		if (!is_string($group_name) || trim($group_name) === '') {
+			continue;
+		}
+		$escaped_name = pwg_db_real_escape_string(trim($group_name));
+
+		$query = '
+SELECT id FROM `' . GROUPS_TABLE . '`
+  WHERE name = \'' . $escaped_name . '\'
+;';
+		$group_row = pwg_db_fetch_assoc(pwg_query($query));
+
+		if (empty($group_row['id'])) {
+			// Create the group, like pwg.groups.add
+			single_insert(GROUPS_TABLE, [
+				'name' => $escaped_name,
+				'is_default' => boolean_to_string(false),
+			]);
+			$group_ids[] = (int)pwg_db_insert_id();
+		} else {
+			$group_ids[] = (int)$group_row['id'];
+		}
+	}
+	$group_ids = array_values(array_unique($group_ids));
+	sort($group_ids);
+
+	$query = '
+SELECT group_id FROM ' . USER_GROUP_TABLE . '
+  WHERE user_id = ' . (int)$user_id . '
+  ORDER BY group_id
+;';
+	$current_ids = array_map('intval', query2array($query, null, 'group_id'));
+
+	if ($current_ids === $group_ids) {
+		return;
+	}
+
+	pwg_query('DELETE FROM ' . USER_GROUP_TABLE . ' WHERE user_id = ' . (int)$user_id . ';');
+	foreach ($group_ids as $group_id) {
+		single_insert(USER_GROUP_TABLE, [
+			'user_id' => (int)$user_id,
+			'group_id' => $group_id,
+		]);
+	}
+
+	// Permissions depend on groups: rebuild the permissions cache of the user
+	pwg_query('UPDATE ' . USER_CACHE_TABLE . ' SET need_update = \'true\' WHERE user_id = ' . (int)$user_id . ';');
 }
 
 /**

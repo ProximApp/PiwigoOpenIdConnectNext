@@ -24,7 +24,7 @@ return [
     // 'scope' => '',
     // 'preferred_username' => '',
     // 'manage_groups' => false,
-    // 'group_claim' => '',
+    // 'groups_claim' => '',
     // 'proxy' => '',
     // 'verify_host' => false,
     // 'verify_peer' => false,
@@ -39,6 +39,9 @@ return [
     // 'registration_url' => '',
     // Allow webmasters to log in with their local Piwigo password through
     // identification.php?oidc_local=1 while a flow is enabled (never through the API)
+    // Redirect URL sent to the provider, default: <Piwigo URL>/plugins/OpenIdConnect/auth.php
+    // Set it when Piwigo is behind a reverse proxy which changes the URL
+    // 'redirect_url' => '',
     // 'local_webmaster_login' => false,
     // Run the finalize_login checks of other plugins (2FA, account lockout...)
     // for OpenID Connect logins too

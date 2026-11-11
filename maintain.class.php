@@ -28,7 +28,7 @@ class OpenIdConnect_maintain extends PluginMaintain
 		'scope' => 'openid profile email',
 		'preferred_username' => '',
 		'manage_groups' => false,
-		'group_claim' => '',
+		'groups_claim' => '',
 		'proxy' => '',
 		'verify_host' => true,
 		'verify_peer' => true,
