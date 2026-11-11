@@ -69,8 +69,13 @@ class OpenIdConnect_maintain extends PluginMaintain
 		global $conf;
 
 		// Add the settings introduced since the installed version, with their
-		// default value, keeping the existing values
-		$config = safe_unserialize($conf['OIDC'] ?? null);
+		// default value, keeping the existing values.
+		// Read the stored value: when the update is run from the plugins
+		// manager, $conf['OIDC'] already contains the conf.php overrides,
+		// which must not be saved in the database.
+		$query = 'SELECT value FROM ' . CONFIG_TABLE . ' WHERE param = \'OIDC\';';
+		$row = pwg_db_fetch_assoc(pwg_query($query));
+		$config = isset($row['value']) ? safe_unserialize($row['value']) : null;
 		if (is_array($config))
 		{
 			// 'group_claim' is the legacy name of 'groups_claim'
@@ -80,7 +85,12 @@ class OpenIdConnect_maintain extends PluginMaintain
 			}
 			unset($config['group_claim']);
 
-			conf_update_param('OIDC', $config + $this->default_conf, true);
+			$config += $this->default_conf;
+			conf_update_param('OIDC', $config);
+
+			// Settings of the current request: keep the conf.php overrides
+			// if they are already applied
+			$conf['OIDC'] = is_array($conf['OIDC'] ?? null) ? $conf['OIDC'] + $config : $config;
 		}
 
 		$this->install($new_version, $errors);

@@ -35,7 +35,7 @@
     <legend>{'Test OpenID connection'|translate}</legend>
 	<ul>
 		<li>
-			<i style="display:inline-block;max-width:30rem;line-height:normal">{'Enabling a flow disables non-OpenID Connect account login. Please test your flow before enabling and make sure at least one OpenID Connect account has webmaster access rights. In case of failure, any config can be overridden by the conf.php found in the plugin folder.'|translate}</i>
+			<i style="display:inline-block;max-width:30rem;line-height:normal">{'Enabling a flow disables non-OpenID Connect account login. Please test your flow before enabling and make sure at least one OpenID Connect account has webmaster access rights. In case of failure, any setting can be overridden in a conf.php file in the plugin folder (copy conf.php.dist).'|translate}</i>
 		</li>
 		<li>
 			<i style="display:inline-block;max-width:30rem;line-height:normal">{'The tests use the saved settings: save the settings before testing.'|translate}</i>

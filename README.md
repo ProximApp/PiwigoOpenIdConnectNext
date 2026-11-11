@@ -65,8 +65,11 @@ Known limitations with Pocket ID 1.16:
 
 ## Change the configuration from conf.php
 
-If OIDC is enabled, and you need to login using a non-oidc account, you can change the value of `authorization_code_flow` or
-`password_flow` to false in conf.php file.
+Any setting can be overridden in a `conf.php` file in the plugin folder: copy `conf.php.dist` to `conf.php`
+and uncomment the settings to override. `conf.php` is not part of the plugin package, so plugin updates keep it.
+
+If OIDC is enabled, and you need to login using a non-oidc account, set `authorization_code_flow` and
+`password_flow` to false in `conf.php`.
 
 
 

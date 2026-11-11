@@ -88,7 +88,8 @@ function is_token_unexpired($access_token, $oidc): bool
 /// Event handlers
 /**
  * Deserialize the database-stored contents of plugin settings
- * Override them with contents of conf.php
+ * Override them with contents of conf.php (not shipped, so that plugin updates
+ * keep it: copy conf.php.dist)
  */
 function oidc_init()
 {
@@ -97,7 +98,9 @@ function oidc_init()
 
 	if (file_exists(OIDC_PATH . 'conf.php')) {
 		$overrideConfig = (include OIDC_PATH . 'conf.php');
-		$conf['OIDC'] = array_merge($conf['OIDC'], $overrideConfig);
+		if (is_array($overrideConfig)) {
+			$conf['OIDC'] = array_merge($conf['OIDC'], $overrideConfig);
+		}
 	}
 
 	// auth.php must not be replaced by the "no photo yet" page of empty

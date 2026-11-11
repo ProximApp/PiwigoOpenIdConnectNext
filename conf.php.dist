@@ -17,6 +17,10 @@
 
 defined('OIDC_PATH') or die('Hacking attempt!');
 
+// Copy this file to conf.php and uncomment the settings to override: they take
+// precedence over the settings of the admin page. conf.php is not part of the
+// plugin package, so plugin updates keep it.
+
 return [
     // 'issuer_url' => '',
     // 'client_id' => '',
