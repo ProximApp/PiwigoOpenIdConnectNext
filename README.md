@@ -19,6 +19,8 @@ file enclosed.
 
 ## Install
 
+Requirements: PHP 7.4 or later. Tested with Piwigo 16.5 on PHP 8.4.
+
 The plugin can be installed easily from [Piwigo extension library](https://piwigo.org/ext/index.php?eid=1049)
 
 Alternatively, you can download a release and
