@@ -1,1 +1,4 @@
 /vendor/
+.DS_Store
+/OpenIdConnect/
+/OpenIdConnect.zip
