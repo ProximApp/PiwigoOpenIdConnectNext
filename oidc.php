@@ -310,10 +310,34 @@ function oidc_login(OpenIDConnectClient $oidc, $token, $remember_me)
 				),
 				array($data));
 
-	// Log the user in
+	// Same checks as the core pwg_login(): no guest account
+	$user_found = oidc_get_user_row($id);
+	if (empty($user_found) || $id == $conf['guest_id'] || $user_found['status'] === 'guest') {
+		trigger_notify('login_failure', $name);
+		return false;
+	}
+
+	// Let other plugins check the login (2FA, account lockout...), like pwg_login()
+	$state = [
+		'can_login' => true,
+		'reason' => null,
+		'authenticated' => false,
+	];
+	if ($conf['OIDC']['apply_login_checks'] ?? true) {
+		$state = trigger_change('finalize_login', $state, $user_found, false);
+	}
+	if (empty($state['can_login'])) {
+		pwg_activity('user', $id, $state['reason'] ?? 'login_failure_before_log_user');
+		trigger_notify('login_failure_before_log_user', $name);
+		return false;
+	}
+
+	// Log the user in, unless a plugin handles log_user() itself
 	// Remember-me is disabled: auto_login() would restore a session without
 	// OpenID Connect token, which refresh_login() rejects
-	log_user($id, false);
+	if (empty($state['authenticated'])) {
+		log_user($id, false);
+	}
 
 	// Store the tokens in the session, once the login is accepted
 	// (log_user() regenerates the session id but keeps its content)
@@ -322,6 +346,33 @@ function oidc_login(OpenIDConnectClient $oidc, $token, $remember_me)
 	trigger_notify('login_success', $name);
 
 	return true;
+}
+
+/**
+ * Return the user row passed to the finalize_login handlers, in the same
+ * format as find_user_by_username_or_email()
+ */
+function oidc_get_user_row($user_id)
+{
+	global $conf;
+
+	$query = '
+SELECT
+  u.' . $conf['user_fields']['id'] . ' AS id,
+  u.' . $conf['user_fields']['username'] . ' AS username,
+  u.' . $conf['user_fields']['email'] . ' AS email,
+  u.' . $conf['user_fields']['password'] . ' AS password,
+  i.status
+FROM ' . USERS_TABLE . ' AS u
+  LEFT JOIN ' . USER_INFOS_TABLE . ' AS i ON u.' . $conf['user_fields']['id'] . ' = i.user_id
+WHERE u.' . $conf['user_fields']['id'] . ' = ' . (int)$user_id . '
+;';
+	$row = pwg_db_fetch_assoc(pwg_query($query));
+	if (empty($row)) {
+		return null;
+	}
+	$row['status'] = $row['status'] ?? 'normal';
+	return $row;
 }
 
 /**

@@ -102,6 +102,12 @@
 			<input type="checkbox" name="local_webmaster_login" id="local_webmaster_login" {if $local_webmaster_login|default:false}checked="checked"{/if}>
 			<label for="local_webmaster_login">{'Allow webmasters to log in with their local password'|translate}</label>
 		</li>
+		<li>
+			<input type="checkbox" name="apply_login_checks" id="apply_login_checks" {if !isset($apply_login_checks) || $apply_login_checks}checked="checked"{/if}>
+			<label for="apply_login_checks">{'Apply the login checks of other plugins (2FA, account lockout...) to OpenID Connect users'|translate}</label>
+			<br />
+			<i style="display:inline-block;max-width:30rem">{'Warning: a two-factor authentication plugin expecting a code in the login form will block OpenID Connect logins. Disable this option if multi-factor authentication is handled by your provider.'|translate}</i>
+		</li>
 	</ul>
 </fieldset>
 

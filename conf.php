@@ -40,6 +40,9 @@ return [
     // Allow webmasters to log in with their local Piwigo password through
     // identification.php?oidc_local=1 while a flow is enabled (never through the API)
     // 'local_webmaster_login' => false,
+    // Run the finalize_login checks of other plugins (2FA, account lockout...)
+    // for OpenID Connect logins too
+    // 'apply_login_checks' => true,
     // Client IDs, other than client_id, whose access tokens are accepted by the
     // pwg.session.login_oidc API method (e.g. a mobile application registered
     // as a separate client with the same provider).

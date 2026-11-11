@@ -42,6 +42,7 @@ class OpenIdConnect_maintain extends PluginMaintain
 		'password_reset_url' => '',
 		'registration_url' => '',
 		'local_webmaster_login' => false,
+		'apply_login_checks' => true,
 	];
 
 	function install($plugin_version, &$errors=array())

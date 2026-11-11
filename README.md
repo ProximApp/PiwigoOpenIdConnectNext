@@ -45,6 +45,13 @@ the user is removed from the provider: revoke it in Piwigo too.
 As a fallback, the *Allow webmasters to log in with their local password* option lets webmasters log in with their
 local password on `identification.php?oidc_local=1` only (never through the API).
 
+## Login checks of other plugins
+
+Like the Piwigo login, an OpenID Connect login runs the `finalize_login` checks of other plugins (two-factor
+authentication, account lockout...). A two-factor authentication plugin expecting a code in the Piwigo login form will
+block OpenID Connect logins: in that case, or if multi-factor authentication is already handled by your provider,
+disable *Apply the login checks of other plugins to OpenID Connect users*.
+
 ## Login through the API
 
 The `pwg.session.login_oidc` webservice method logs a user in using an OpenID Connect access token. It is only available when one of the flows is enabled.

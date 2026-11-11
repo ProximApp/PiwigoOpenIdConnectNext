@@ -105,6 +105,7 @@ if (isset($_POST['save_config']))
 		'password_reset_url' => $_POST['password_reset_url'], 
 		'registration_url' => $_POST['registration_url'],
 		'local_webmaster_login' => isset($_POST['local_webmaster_login']),
+		'apply_login_checks' => isset($_POST['apply_login_checks']),
 	];
 
 	conf_update_param('OIDC', $conf['OIDC']);
