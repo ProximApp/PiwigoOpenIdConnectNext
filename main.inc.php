@@ -41,6 +41,7 @@ require(OIDC_PATH . 'oidc.php');
 // The menubar is cached in the block manager before applying the full template
 add_event_handler('plugins_loaded', 'oidc_init'); // earliest init possible
 add_event_handler('load_profile_in_template', 'oidc_profile');
+add_event_handler('loc_begin_profile', 'oidc_profile_actions');
 add_event_handler('blockmanager_apply', 'override_login_link');
 add_event_handler('loc_begin_password', 'oidc_redirect');
 add_event_handler('loc_begin_register', 'oidc_redirect');
@@ -122,11 +123,71 @@ function oidc_init()
  */
 function oidc_profile()
 {
-	global $template;
+	global $template, $user;
 
 	if (isset($_SESSION[OIDC_SESSION])) {
 		$template->assign('SPECIAL_USER', true);
 	}
+
+	// Account linking block, on the profile page of the user only (the
+	// administration also uses load_profile_in_template for other users)
+	if (script_basename() != 'profile' || !oidc_profile_linking_available()) {
+		return;
+	}
+	$token = get_pwg_token();
+	$template->assign([
+		'OIDC_LINKED' => oidc_user_is_linked($user['id']),
+		'OIDC_ENFORCED' => oidc_enforced(),
+		'U_OIDC_LINK' => get_root_url() . 'profile.php?oidc_link=1&pwg_token=' . $token,
+		'U_OIDC_UNLINK' => get_root_url() . 'profile.php?oidc_unlink=1&pwg_token=' . $token,
+	]);
+	// Keyed block (section id "oidc-section" in the standard pages of
+	// Piwigo 16), without the Submit button: the actions are links
+	$template->append('PLUGINS_PROFILE', ['oidc' => [
+		'name' => l10n('OpenID Connect'),
+		'desc' => l10n('Log in with your OpenID Connect account'),
+		'template' => realpath(OIDC_PATH . 'template/profile.tpl'),
+		'standard_show_save' => false,
+	]], true);
+}
+
+/**
+ * Whether the current user can link their account from their profile page
+ */
+function oidc_profile_linking_available()
+{
+	global $user;
+	return oidc_provider_configured()
+		&& !is_a_guest()
+		&& !in_array($user['status'] ?? 'guest', ['guest', 'generic'], true);
+}
+
+/**
+ * Link and unlink actions of the profile page (links with a pwg_token)
+ */
+function oidc_profile_actions()
+{
+	global $user;
+
+	if (!isset($_GET['oidc_link']) && !isset($_GET['oidc_unlink'])) {
+		return;
+	}
+	check_pwg_token();
+	if (!oidc_profile_linking_available()) {
+		redirect(get_root_url() . 'profile.php');
+	}
+
+	if (isset($_GET['oidc_link'])) {
+		// The OpenID Connect flow, finished in auth.php, links the identity
+		// to the account of the user who started it
+		$_SESSION[OIDC_SESSION . '_link'] = (int)$user['id'];
+		redirect(oidc_auth_url());
+	}
+
+	oidc_unlink_account($user['id']);
+	// The profile page of the standard pages (Piwigo 16) does not display
+	// the page messages, the gallery home does
+	redirect(get_gallery_home_url());
 }
 
 /**

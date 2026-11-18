@@ -469,6 +469,67 @@ SELECT u.' . $conf['user_fields']['id'] . ' AS id, i.status
 }
 
 /**
+ * Link the OpenID Connect identity of $oidc to the account $user_id, at the
+ * request of its logged in owner (profile page). The user proves they control
+ * both: any account can be linked this way, webmasters included.
+ *
+ * @return bool whether the identity is linked to the account
+ */
+function oidc_link_account(OpenIDConnectClient $oidc, $user_id)
+{
+	$user_id = (int)$user_id;
+	$sub = $oidc->requestUserInfo('sub');
+	if (!is_string($sub) || $sub === '') {
+		$_SESSION['page_errors'][] = l10n('The OpenID Connect provider did not return your identity.');
+		return false;
+	}
+
+	$query = 'SELECT user_id FROM ' . OIDC_TABLE . ' WHERE sub = \'' . pwg_db_real_escape_string($sub) . '\';';
+	$row = pwg_db_fetch_assoc(pwg_query($query));
+	if (!empty($row)) {
+		if ((int)$row['user_id'] === $user_id) {
+			$_SESSION['page_infos'][] = l10n('Your account is already linked to this OpenID Connect account.');
+			return true;
+		}
+		oidc_log('identity "' . $sub . '" not linked to user #' . $user_id . ': already linked to user #' . (int)$row['user_id']);
+		$_SESSION['page_errors'][] = l10n('This OpenID Connect account is already linked to another Piwigo account.');
+		return false;
+	}
+	if (oidc_user_is_linked($user_id)) {
+		$_SESSION['page_errors'][] = l10n('Your account is already linked to another OpenID Connect account: unlink it first.');
+		return false;
+	}
+
+	// single_insert() does not escape values
+	single_insert(OIDC_TABLE, [
+		'sub' => pwg_db_real_escape_string($sub),
+		'user_id' => $user_id,
+	]);
+	pwg_activity('user', $user_id, 'oidc_link', ['method' => 'profile']);
+	oidc_log('identity "' . $sub . '" linked to user #' . $user_id . ' from the profile page');
+	$_SESSION['page_infos'][] = l10n('Your account is linked to your OpenID Connect account.');
+	return true;
+}
+
+/**
+ * Remove the OpenID Connect identity of the account $user_id (profile page)
+ */
+function oidc_unlink_account($user_id)
+{
+	$user_id = (int)$user_id;
+	if (!oidc_user_is_linked($user_id)) {
+		return;
+	}
+	pwg_query('DELETE FROM ' . OIDC_TABLE . ' WHERE user_id = \'' . $user_id . '\';');
+	pwg_activity('user', $user_id, 'oidc_unlink');
+	oidc_log('user #' . $user_id . ' unlinked from their OpenID Connect identity');
+	// The session is no longer backed by the unlinked identity: when a flow
+	// is enabled, refresh_login() closes it (except the webmaster fallback)
+	unset($_SESSION[OIDC_SESSION]);
+	$_SESSION['page_infos'][] = l10n('Your account is no longer linked to an OpenID Connect account.');
+}
+
+/**
  * Whether the user $user_id is linked to an OpenID Connect identity
  */
 function oidc_user_is_linked($user_id)
