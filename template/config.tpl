@@ -125,11 +125,10 @@
 			<label for="register_new_users">{'Register new Piwigo users on succesful OpenID Connect authentication'|translate}</label>
 		</li>
 		<li>
-			<i style="display:inline-block;max-width:30rem">WARNING: do not enable this setting if you do not control OID logins. Else, this would allows one to takeover control on local piwigo accounts (such as the default admin account).
-			It is useful in case of migration from LDAP accounts to OIDC SSO setup for example.</i>
-			<br/>
-			<input type="checkbox" name="link_to_existing_users" id="link_to_existing_users" {if $link_to_existing_users}checked="checked"{/if}>
-			<label for="link_to_existing_users">{'If a user with same login already exists, link OpenID account to it'|translate}</label>
+			<input type="checkbox" name="link_by_verified_email" id="link_by_verified_email" {if $link_by_verified_email|default:false}checked="checked"{/if}>
+			<label for="link_by_verified_email">{'Link new OpenID Connect users to the existing Piwigo account with the same verified e-mail address'|translate}</label>
+			<br />
+			<i style="display:inline-block;max-width:30rem">{'For migrations (LDAP, local accounts...). The provider must verify e-mail addresses (email_verified claim). Webmaster and administrator accounts are never linked automatically: they are linked from their profile page.'|translate}</i>
 		</li>
 		<li>
 			<input type="checkbox" name="redirect_new_to_profile" id="redirect_new_to_profile" {if $redirect_new_to_profile}checked="checked"{/if}>

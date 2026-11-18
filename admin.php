@@ -129,7 +129,7 @@ if (isset($_POST['save_config']))
 		'verify_peer' => isset($_POST['verify_peer']),
 		'authparam' => $text('authparam'),
 		'register_new_users' => isset($_POST['register_new_users']),
-		'link_to_existing_users' => isset($_POST['link_to_existing_users']),
+		'link_by_verified_email' => isset($_POST['link_by_verified_email']),
 		'redirect_new_to_profile' => isset($_POST['redirect_new_to_profile']),
 		'notify_admins_on_register' => isset($_POST['notify_admins_on_register']),
 		'notify_user_on_register' => isset($_POST['notify_user_on_register']),

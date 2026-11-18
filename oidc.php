@@ -264,9 +264,9 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 	// If the user is not found, try to register
 	if (empty($row['id'])) {
 		$id = false;
-		if (!empty($config['link_to_existing_users'])) {
-			// Trying to find an already existing account with the same login
-			$id = get_userid($name);
+		if (!empty($config['link_by_verified_email'])) {
+			// Link to an existing account with the same verified e-mail
+			$id = oidc_find_account_to_link($oidc, $sub, $email);
 		}
 		if ($id === false && ($config['register_new_users'] || $force_registration)) {
 			// Registration is allowed, overwrite $row
@@ -343,12 +343,11 @@ function oidc_update_user(OpenIDConnectClient $oidc, $user_id)
 
 	$data = [];
 
-	// Without a usable preferred username claim, the username is not changed
-	// (get_preferred_username() falls back to sub, for the registration only)
+	// The username is only updated from the preferred username claim: without
+	// it, get_preferred_username() falls back to sub, which is the username
+	// of the registered users but would rename linked existing accounts
 	$name = null;
-	if (empty($config['preferred_username'])) {
-		$name = get_preferred_username($oidc);
-	} else {
+	if (!empty($config['preferred_username'])) {
 		$claim = $oidc->requestUserInfo($config['preferred_username']);
 		if (is_string($claim) && $claim !== '') {
 			$name = $claim;
@@ -411,6 +410,72 @@ SELECT COUNT(*) FROM ' . USERS_TABLE . '
 			oidc_sync_groups($user_id, $groups);
 		}
 	}
+}
+
+/**
+ * Find the existing Piwigo account to link to a new OpenID Connect identity,
+ * by e-mail (link_by_verified_email setting).
+ *
+ * The username is never used: users can often edit it at the provider. The
+ * e-mail must be verified by the provider (email_verified claim) and belong
+ * to exactly one account, which must not be linked to another identity yet.
+ * Webmaster, administrator and guest accounts are never linked
+ * automatically: their owners link them from their profile page.
+ *
+ * @param OpenIDConnectClient $oidc
+ * @param string $sub
+ * @param string $email
+ * @return int|false the id of the account, false if none can be linked
+ */
+function oidc_find_account_to_link(OpenIDConnectClient $oidc, $sub, $email)
+{
+	global $conf;
+
+	if (!is_string($email) || $email === '' || !email_check_format($email)) {
+		return false;
+	}
+	$verified = $oidc->requestUserInfo('email_verified');
+	if ($verified !== true && $verified !== 'true') {
+		return false;
+	}
+
+	$query = '
+SELECT u.' . $conf['user_fields']['id'] . ' AS id, i.status
+  FROM ' . USERS_TABLE . ' AS u
+    LEFT JOIN ' . USER_INFOS_TABLE . ' AS i ON i.user_id = u.' . $conf['user_fields']['id'] . '
+  WHERE UPPER(u.' . $conf['user_fields']['email'] . ') = UPPER(\'' . pwg_db_real_escape_string($email) . '\')
+;';
+	$rows = query2array($query);
+	if (count($rows) !== 1) {
+		if (count($rows) > 1) {
+			oidc_log('identity "' . $sub . '" not linked: e-mail "' . $email . '" used by several accounts');
+		}
+		return false;
+	}
+	$id = (int)$rows[0]['id'];
+
+	if ($id == $conf['guest_id'] || in_array($rows[0]['status'] ?? 'normal', ['webmaster', 'admin', 'guest'], true)) {
+		oidc_log('identity "' . $sub . '" not linked to user #' . $id . ': webmaster, administrator and guest accounts are linked from their profile page only');
+		return false;
+	}
+	if (oidc_user_is_linked($id)) {
+		oidc_log('identity "' . $sub . '" not linked to user #' . $id . ': the account is already linked to another identity');
+		return false;
+	}
+
+	pwg_activity('user', $id, 'oidc_link', ['method' => 'verified_email']);
+	oidc_log('identity "' . $sub . '" linked to user #' . $id . ' by verified e-mail');
+	return $id;
+}
+
+/**
+ * Whether the user $user_id is linked to an OpenID Connect identity
+ */
+function oidc_user_is_linked($user_id)
+{
+	$query = 'SELECT COUNT(*) FROM ' . OIDC_TABLE . ' WHERE user_id = \'' . (int)$user_id . '\';';
+	list($count) = pwg_db_fetch_row(pwg_query($query));
+	return $count > 0;
 }
 
 /**
