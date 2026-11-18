@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: OpenId Connect
-Version: 2.1.0
+Version: 2.2.0
 Description: This plugin provides OpenID Connect integration.
 Plugin URI: https://piwigo.org/ext/index.php?eid=1049
 Author: ProximApp (originally Jasper Weyne)
@@ -41,6 +41,7 @@ require(OIDC_PATH . 'oidc.php');
 // The menubar is cached in the block manager before applying the full template
 add_event_handler('plugins_loaded', 'oidc_init'); // earliest init possible
 add_event_handler('load_profile_in_template', 'oidc_profile');
+add_event_handler('loc_begin_profile', 'oidc_profile_actions');
 add_event_handler('blockmanager_apply', 'override_login_link');
 add_event_handler('loc_begin_password', 'oidc_redirect');
 add_event_handler('loc_begin_register', 'oidc_redirect');
@@ -122,11 +123,91 @@ function oidc_init()
  */
 function oidc_profile()
 {
-	global $template;
+	global $template, $user;
 
 	if (isset($_SESSION[OIDC_SESSION])) {
 		$template->assign('SPECIAL_USER', true);
 	}
+
+	// Account linking block, on the profile page of the user only (the
+	// administration also uses load_profile_in_template for other users)
+	if (script_basename() != 'profile' || !oidc_profile_linking_available()) {
+		return;
+	}
+	$token = get_pwg_token();
+	$template->assign([
+		'OIDC_LINKED' => oidc_user_is_linked($user['id']),
+		'OIDC_CAN_UNLINK' => oidc_unlink_allowed(),
+		'U_OIDC_LINK' => get_root_url() . 'profile.php?oidc_link=1&pwg_token=' . $token,
+		'U_OIDC_UNLINK' => get_root_url() . 'profile.php?oidc_unlink=1&pwg_token=' . $token,
+	]);
+	// Keyed block (section id "oidc-section" in the standard pages of
+	// Piwigo 16), without the Submit button: the actions are links
+	$template->append('PLUGINS_PROFILE', ['oidc' => [
+		'name' => l10n('OpenID Connect'),
+		'desc' => l10n('Log in with your OpenID Connect account'),
+		'template' => realpath(OIDC_PATH . 'template/profile.tpl'),
+		'standard_show_save' => false,
+	]], true);
+}
+
+/**
+ * Whether the current user can link their account from their profile page:
+ * only in an interactive session (login page, OpenID Connect, remember-me),
+ * not with an authentication key (?auth= links sent by e-mail) or an API key,
+ * which would allow anyone holding the key to link their own identity.
+ */
+function oidc_profile_linking_available()
+{
+	global $user;
+	return oidc_provider_configured()
+		&& !is_a_guest()
+		&& !in_array($user['status'] ?? 'guest', ['guest', 'generic'], true)
+		&& ($_SESSION['connected_with'] ?? null) === 'pwg_ui';
+}
+
+/**
+ * Whether the current user can unlink their account: when a flow is enabled,
+ * only webmasters allowed to use the local login fallback (others could no
+ * longer log in, and would be linked again or get a new account).
+ */
+function oidc_unlink_allowed()
+{
+	global $user;
+	return !oidc_enforced()
+		|| (oidc_local_webmaster_login_enabled() && ($user['status'] ?? null) === 'webmaster');
+}
+
+/**
+ * Link and unlink actions of the profile page (links with a pwg_token)
+ */
+function oidc_profile_actions()
+{
+	global $user;
+
+	if (!isset($_GET['oidc_link']) && !isset($_GET['oidc_unlink'])) {
+		return;
+	}
+	check_pwg_token();
+	if (!oidc_profile_linking_available()) {
+		redirect(get_root_url() . 'profile.php');
+	}
+
+	if (isset($_GET['oidc_link'])) {
+		// The OpenID Connect flow, finished in auth.php, links the identity
+		// to the account of the user who started it
+		oidc_start_link($user['id']);
+		redirect(oidc_auth_url() . '?oidc_link=1');
+	}
+
+	if (!oidc_unlink_allowed()) {
+		$_SESSION['page_errors'][] = l10n('Your account cannot be unlinked while OpenID Connect login is enforced: you could no longer log in.');
+		redirect(get_gallery_home_url());
+	}
+	oidc_unlink_account($user['id']);
+	// The profile page of the standard pages (Piwigo 16) does not display
+	// the page messages, the gallery home does
+	redirect(get_gallery_home_url());
 }
 
 /**

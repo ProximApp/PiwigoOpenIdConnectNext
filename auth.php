@@ -21,8 +21,18 @@ define('OIDC_AUTH_PAGE', true);
 require_once(PHPWG_ROOT_PATH.'include/common.inc.php');
 require_once(OIDC_PATH . 'oidc.php');
 
+// Account linking started from the profile page (see oidc_profile_actions())
+$link_user_id = oidc_pending_link();
+if ($link_user_id !== null) {
+    // Must be finished by the user who started it, still logged in
+    // interactively
+    if (!oidc_profile_linking_available() || (int)$user['id'] !== $link_user_id) {
+        oidc_cancel_link();
+        redirect(get_gallery_home_url());
+    }
+}
 // Test or authentication flow preperations
-if (isset($_SESSION[OIDC_SESSION . '_auth'])) {
+elseif (isset($_SESSION[OIDC_SESSION . '_auth'])) {
     $value = $_SESSION[OIDC_SESSION . '_auth'];
 
     // Disable test flow, in case of invalid access
@@ -53,6 +63,19 @@ try {
     $oidc = get_oidc_client();
     $success = $oidc->authenticate();
 
+    // Account linking flow
+    if ($link_user_id !== null) {
+        oidc_cancel_link();
+        if ($success && oidc_link_account($oidc, $link_user_id)
+            && oidc_login($oidc, $oidc->getTokenResponse(), false)) {
+            // The session is now an OpenID Connect session
+            $_SESSION['connected_with'] = 'pwg_ui';
+        }
+        // The profile page of the standard pages (Piwigo 16) does not display
+        // the page messages, the gallery home does
+        redirect(get_gallery_home_url());
+    }
+
     // Test flow
     if (isset($_SESSION[OIDC_SESSION . '_auth'])) {
         // Create flow
@@ -82,6 +105,15 @@ try {
         $_SESSION['page_errors'][] = l10n('Login not successful, try again.');
     }
 } catch (\Exception $e) {
+    // Account linking flow
+    if ($link_user_id !== null) {
+        oidc_cancel_link();
+        $_SESSION['page_errors'][] = htmlspecialchars($e->getMessage());
+        // The profile page of the standard pages (Piwigo 16) does not display
+        // the page messages, the gallery home does
+        redirect(get_gallery_home_url());
+    }
+
     // Test flow
     if (isset($_SESSION[OIDC_SESSION . '_auth'])) {
         unset($_SESSION[OIDC_SESSION . '_auth']);
