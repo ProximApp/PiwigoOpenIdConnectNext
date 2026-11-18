@@ -87,6 +87,25 @@ the user is removed from the provider: revoke it in Piwigo too.
 As a fallback, the *Allow webmasters to log in with their local password* option lets webmasters log in with their
 local password on `identification.php?oidc_local=1` only (never through the API).
 
+## Existing Piwigo accounts
+
+A new OpenID Connect user gets a new Piwigo account. To use an existing account instead:
+
+- **From the profile page.** A user logged in with their Piwigo account clicks *Link my OpenID Connect account*
+  in their profile and logs in at the provider. Any account can be linked this way, webmasters included: this is
+  how webmasters switch to OpenID Connect. Do it before enabling a flow, or log in with the webmaster local login
+  (see above). The link can be removed from the profile page.
+- **By verified e-mail (migrations).** With *Link new OpenID Connect users to the existing Piwigo account with the
+  same verified e-mail address*, a new OpenID Connect user is linked to the account with the same e-mail, if the
+  provider says the e-mail is verified (`email_verified` claim) and no other account uses it. Webmaster,
+  administrator and guest accounts are never linked this way, nor accounts already linked to another identity.
+
+Usernames are never used to link accounts: users can often choose their username at the provider. Links are
+recorded in the activity log.
+
+When the *Preferred username* claim is set, the username of a linked account is updated from the provider at each
+login.
+
 ## Login checks of other plugins
 
 Like the Piwigo login, an OpenID Connect login runs the `finalize_login` checks of other plugins (two-factor
