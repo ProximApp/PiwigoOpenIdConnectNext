@@ -94,11 +94,23 @@ A new OpenID Connect user gets a new Piwigo account. To use an existing account 
 - **From the profile page.** A user logged in with their Piwigo account clicks *Link my OpenID Connect account*
   in their profile and logs in at the provider. Any account can be linked this way, webmasters included: this is
   how webmasters switch to OpenID Connect. Do it before enabling a flow, or log in with the webmaster local login
-  (see above). The link can be removed from the profile page.
-- **By verified e-mail (migrations).** With *Link new OpenID Connect users to the existing Piwigo account with the
-  same verified e-mail address*, a new OpenID Connect user is linked to the account with the same e-mail, if the
-  provider says the e-mail is verified (`email_verified` claim) and no other account uses it. Webmaster,
-  administrator and guest accounts are never linked this way, nor accounts already linked to another identity.
+  (see above). Administrators (who cannot use the webmaster local login) must link their account before a flow is
+  enabled. Linking is only possible after an interactive login, not with an `?auth=` link or an API key. While a
+  flow is enabled, only webmasters allowed to use the local login can remove the link (others could no longer log in).
+- **By e-mail (migrations).** With *Link new OpenID Connect users to the existing Piwigo account with the same
+  e-mail address*, a new OpenID Connect user is linked to the account with the same e-mail, if no other account
+  uses it. Choose between:
+  - *Only e-mail addresses verified by the provider*: the provider must send `email_verified` = true;
+  - *All e-mail addresses of the provider*: for providers that do not send `email_verified`, when users cannot
+    change their e-mail address there (accounts managed by administrators or imported from LDAP).
+
+  Webmaster, administrator, generic and guest accounts are never linked this way, nor accounts already linked to
+  another identity.
+
+  **Use this option with caution:** make sure that e-mail addresses are reliable both in Piwigo and at your identity
+  provider, and that users cannot set the e-mail address of someone else. Otherwise, someone could use the e-mail
+  address of another user to take over their account. API keys of an account keep working once it is linked: the
+  PHP log reports linked accounts that have active API keys.
 
 Usernames are never used to link accounts: users can often choose their username at the provider. Links are
 recorded in the activity log.

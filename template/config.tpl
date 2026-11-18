@@ -125,10 +125,17 @@
 			<label for="register_new_users">{'Register new Piwigo users on succesful OpenID Connect authentication'|translate}</label>
 		</li>
 		<li>
-			<input type="checkbox" name="link_by_verified_email" id="link_by_verified_email" {if $link_by_verified_email|default:false}checked="checked"{/if}>
-			<label for="link_by_verified_email">{'Link new OpenID Connect users to the existing Piwigo account with the same verified e-mail address'|translate}</label>
+			<label for="link_by_email">{'Link new OpenID Connect users to the existing Piwigo account with the same e-mail address'|translate}</label>
 			<br />
-			<i style="display:inline-block;max-width:30rem">{'For migrations (LDAP, local accounts...). The provider must verify e-mail addresses (email_verified claim). Webmaster and administrator accounts are never linked automatically: they are linked from their profile page.'|translate}</i>
+			<select name="link_by_email" id="link_by_email">
+				<option value="" {if empty($link_by_email)}selected="selected"{/if}>{'Disabled'|translate}</option>
+				<option value="verified" {if ($link_by_email|default:'') == 'verified'}selected="selected"{/if}>{'Only e-mail addresses verified by the provider (email_verified claim)'|translate}</option>
+				<option value="all" {if ($link_by_email|default:'') == 'all'}selected="selected"{/if}>{'All e-mail addresses of the provider'|translate}</option>
+			</select>
+			<br />
+			<strong style="display:inline-block;max-width:30rem">{'Use this option with caution: make sure that e-mail addresses are reliable both in Piwigo and at your identity provider, and that users cannot set the e-mail address of someone else. Otherwise, someone could use the e-mail address of another user to take over their account.'|translate}</strong>
+			<br />
+			<i style="display:inline-block;max-width:30rem">{'For migrations (LDAP, local accounts...). Choose "All e-mail addresses" only if your provider does not send the email_verified claim and users cannot change their e-mail address there. Webmaster and administrator accounts are never linked automatically: webmasters link their account from their profile page, administrators must do it before a flow is enabled.'|translate}</i>
 		</li>
 		<li>
 			<input type="checkbox" name="redirect_new_to_profile" id="redirect_new_to_profile" {if $redirect_new_to_profile}checked="checked"{/if}>

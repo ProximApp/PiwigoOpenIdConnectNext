@@ -264,9 +264,10 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 	// If the user is not found, try to register
 	if (empty($row['id'])) {
 		$id = false;
-		if (!empty($config['link_by_verified_email'])) {
-			// Link to an existing account with the same verified e-mail
-			$id = oidc_find_account_to_link($oidc, $sub, $email);
+		$link_by_email = $config['link_by_email'] ?? '';
+		if (in_array($link_by_email, ['verified', 'all'], true)) {
+			// Link to an existing account with the same e-mail
+			$id = oidc_find_account_to_link($oidc, $sub, $email, $link_by_email);
 		}
 		if ($id === false && ($config['register_new_users'] || $force_registration)) {
 			// Registration is allowed, overwrite $row
@@ -414,29 +415,33 @@ SELECT COUNT(*) FROM ' . USERS_TABLE . '
 
 /**
  * Find the existing Piwigo account to link to a new OpenID Connect identity,
- * by e-mail (link_by_verified_email setting).
+ * by e-mail (link_by_email setting: 'verified' or 'all').
  *
- * The username is never used: users can often edit it at the provider. The
- * e-mail must be verified by the provider (email_verified claim) and belong
- * to exactly one account, which must not be linked to another identity yet.
- * Webmaster, administrator and guest accounts are never linked
- * automatically: their owners link them from their profile page.
+ * The username is never used: users can often edit it at the provider. With
+ * 'verified', the provider must say the e-mail is verified (email_verified
+ * claim). The e-mail must belong to exactly one account, which must not be
+ * linked to another identity yet. Webmaster, administrator, generic and guest
+ * accounts are never linked automatically.
  *
  * @param OpenIDConnectClient $oidc
  * @param string $sub
  * @param string $email
+ * @param string $mode 'verified' or 'all'
  * @return int|false the id of the account, false if none can be linked
  */
-function oidc_find_account_to_link(OpenIDConnectClient $oidc, $sub, $email)
+function oidc_find_account_to_link(OpenIDConnectClient $oidc, $sub, $email, $mode)
 {
 	global $conf;
 
 	if (!is_string($email) || $email === '' || !email_check_format($email)) {
 		return false;
 	}
-	$verified = $oidc->requestUserInfo('email_verified');
-	if ($verified !== true && $verified !== 'true') {
-		return false;
+	if ($mode !== 'all') {
+		$verified = $oidc->requestUserInfo('email_verified');
+		if ($verified !== true && $verified !== 'true') {
+			oidc_log('identity "' . $sub . '" not linked by e-mail: the provider does not say the e-mail is verified (email_verified claim: ' . var_export($verified, true) . ')');
+			return false;
+		}
 	}
 
 	$query = '
@@ -454,8 +459,8 @@ SELECT u.' . $conf['user_fields']['id'] . ' AS id, i.status
 	}
 	$id = (int)$rows[0]['id'];
 
-	if ($id == $conf['guest_id'] || in_array($rows[0]['status'] ?? 'normal', ['webmaster', 'admin', 'guest'], true)) {
-		oidc_log('identity "' . $sub . '" not linked to user #' . $id . ': webmaster, administrator and guest accounts are linked from their profile page only');
+	if ($id == $conf['guest_id'] || in_array($rows[0]['status'] ?? 'normal', ['webmaster', 'admin', 'generic', 'guest'], true)) {
+		oidc_log('identity "' . $sub . '" not linked to user #' . $id . ': webmaster, administrator, generic and guest accounts are never linked by e-mail');
 		return false;
 	}
 	if (oidc_user_is_linked($id)) {
@@ -463,8 +468,22 @@ SELECT u.' . $conf['user_fields']['id'] . ' AS id, i.status
 		return false;
 	}
 
-	pwg_activity('user', $id, 'oidc_link', ['method' => 'verified_email']);
-	oidc_log('identity "' . $sub . '" linked to user #' . $id . ' by verified e-mail');
+	pwg_activity('user', $id, 'oidc_link', ['method' => $mode === 'all' ? 'email' : 'verified_email']);
+	oidc_log('identity "' . $sub . '" linked to user #' . $id . ' by e-mail');
+
+	// API keys created before the link keep working: if the account was
+	// prepared by someone else, they would keep an access to it
+	$query = '
+SELECT COUNT(*) FROM ' . USER_AUTH_KEYS_TABLE . '
+  WHERE user_id = ' . $id . '
+    AND apikey_secret IS NOT NULL
+    AND revoked_on IS NULL
+    AND expired_on > NOW()
+;';
+	list($keys) = pwg_db_fetch_row(pwg_query($query));
+	if ($keys > 0) {
+		oidc_log('user #' . $id . ' linked by e-mail has ' . (int)$keys . ' active API key(s): check that they belong to its owner');
+	}
 	return $id;
 }
 
@@ -527,6 +546,45 @@ function oidc_unlink_account($user_id)
 	// is enabled, refresh_login() closes it (except the webmaster fallback)
 	unset($_SESSION[OIDC_SESSION]);
 	$_SESSION['page_infos'][] = l10n('Your account is no longer linked to an OpenID Connect account.');
+}
+
+/**
+ * Pending account linking started from the profile page: the user id, kept
+ * in the session for a short time.
+ */
+const OIDC_LINK_TTL = 600;
+
+function oidc_start_link($user_id)
+{
+	$_SESSION[OIDC_SESSION . '_link'] = ['uid' => (int)$user_id, 'time' => time()];
+}
+
+function oidc_cancel_link()
+{
+	unset($_SESSION[OIDC_SESSION . '_link']);
+}
+
+/**
+ * Return the user id of the account linking handled by this request of
+ * auth.php, or null. The linking is only continued by the request that
+ * starts it (auth.php?oidc_link=1) and by the callback of the provider:
+ * any other flow started meanwhile (login, test of the admin page) cancels
+ * it, so that an abandoned linking is never finished by another flow.
+ *
+ * @return int|null
+ */
+function oidc_pending_link()
+{
+	$link = $_SESSION[OIDC_SESSION . '_link'] ?? null;
+	if ($link === null) {
+		return null;
+	}
+	$continued = isset($_GET['oidc_link']) || isset($_GET['code']) || isset($_GET['error']);
+	if (!is_array($link) || time() - (int)($link['time'] ?? 0) > OIDC_LINK_TTL || !$continued) {
+		oidc_cancel_link();
+		return null;
+	}
+	return (int)$link['uid'];
 }
 
 /**

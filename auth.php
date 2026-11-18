@@ -22,11 +22,12 @@ require_once(PHPWG_ROOT_PATH.'include/common.inc.php');
 require_once(OIDC_PATH . 'oidc.php');
 
 // Account linking started from the profile page (see oidc_profile_actions())
-$link_user_id = $_SESSION[OIDC_SESSION . '_link'] ?? null;
+$link_user_id = oidc_pending_link();
 if ($link_user_id !== null) {
     // Must be finished by the user who started it, still logged in
-    if (is_a_guest() || (int)$user['id'] !== (int)$link_user_id || !oidc_provider_configured()) {
-        unset($_SESSION[OIDC_SESSION . '_link']);
+    // interactively
+    if (!oidc_profile_linking_available() || (int)$user['id'] !== $link_user_id) {
+        oidc_cancel_link();
         redirect(get_gallery_home_url());
     }
 }
@@ -64,7 +65,7 @@ try {
 
     // Account linking flow
     if ($link_user_id !== null) {
-        unset($_SESSION[OIDC_SESSION . '_link']);
+        oidc_cancel_link();
         if ($success && oidc_link_account($oidc, $link_user_id)
             && oidc_login($oidc, $oidc->getTokenResponse(), false)) {
             // The session is now an OpenID Connect session
@@ -106,7 +107,7 @@ try {
 } catch (\Exception $e) {
     // Account linking flow
     if ($link_user_id !== null) {
-        unset($_SESSION[OIDC_SESSION . '_link']);
+        oidc_cancel_link();
         $_SESSION['page_errors'][] = htmlspecialchars($e->getMessage());
         // The profile page of the standard pages (Piwigo 16) does not display
         // the page messages, the gallery home does

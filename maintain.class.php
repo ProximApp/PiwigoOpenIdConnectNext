@@ -34,7 +34,7 @@ class OpenIdConnect_maintain extends PluginMaintain
 		'verify_peer' => true,
 		'authparam' => '',
 		'register_new_users' => true,
-		'link_by_verified_email' => false,
+		'link_by_email' => '', // '', 'verified' or 'all'
 		'redirect_new_to_profile' => false,
 		'notify_admins_on_register' => false,
 		'notify_user_on_register' => false,

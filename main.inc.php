@@ -137,7 +137,7 @@ function oidc_profile()
 	$token = get_pwg_token();
 	$template->assign([
 		'OIDC_LINKED' => oidc_user_is_linked($user['id']),
-		'OIDC_ENFORCED' => oidc_enforced(),
+		'OIDC_CAN_UNLINK' => oidc_unlink_allowed(),
 		'U_OIDC_LINK' => get_root_url() . 'profile.php?oidc_link=1&pwg_token=' . $token,
 		'U_OIDC_UNLINK' => get_root_url() . 'profile.php?oidc_unlink=1&pwg_token=' . $token,
 	]);
@@ -152,14 +152,30 @@ function oidc_profile()
 }
 
 /**
- * Whether the current user can link their account from their profile page
+ * Whether the current user can link their account from their profile page:
+ * only in an interactive session (login page, OpenID Connect, remember-me),
+ * not with an authentication key (?auth= links sent by e-mail) or an API key,
+ * which would allow anyone holding the key to link their own identity.
  */
 function oidc_profile_linking_available()
 {
 	global $user;
 	return oidc_provider_configured()
 		&& !is_a_guest()
-		&& !in_array($user['status'] ?? 'guest', ['guest', 'generic'], true);
+		&& !in_array($user['status'] ?? 'guest', ['guest', 'generic'], true)
+		&& ($_SESSION['connected_with'] ?? null) === 'pwg_ui';
+}
+
+/**
+ * Whether the current user can unlink their account: when a flow is enabled,
+ * only webmasters allowed to use the local login fallback (others could no
+ * longer log in, and would be linked again or get a new account).
+ */
+function oidc_unlink_allowed()
+{
+	global $user;
+	return !oidc_enforced()
+		|| (oidc_local_webmaster_login_enabled() && ($user['status'] ?? null) === 'webmaster');
 }
 
 /**
@@ -180,10 +196,14 @@ function oidc_profile_actions()
 	if (isset($_GET['oidc_link'])) {
 		// The OpenID Connect flow, finished in auth.php, links the identity
 		// to the account of the user who started it
-		$_SESSION[OIDC_SESSION . '_link'] = (int)$user['id'];
-		redirect(oidc_auth_url());
+		oidc_start_link($user['id']);
+		redirect(oidc_auth_url() . '?oidc_link=1');
 	}
 
+	if (!oidc_unlink_allowed()) {
+		$_SESSION['page_errors'][] = l10n('Your account cannot be unlinked while OpenID Connect login is enforced: you could no longer log in.');
+		redirect(get_gallery_home_url());
+	}
 	oidc_unlink_account($user['id']);
 	// The profile page of the standard pages (Piwigo 16) does not display
 	// the page messages, the gallery home does

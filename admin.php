@@ -36,6 +36,12 @@ if ($oidc_test && !oidc_provider_configured())
 	$oidc_test = false;
 }
 
+// A test cancels an account linking started from the profile page
+if ($oidc_test)
+{
+	oidc_cancel_link();
+}
+
 // Authorization flow forms
 if ($oidc_test && isset($_POST['authorization_create']))
 {
@@ -129,7 +135,7 @@ if (isset($_POST['save_config']))
 		'verify_peer' => isset($_POST['verify_peer']),
 		'authparam' => $text('authparam'),
 		'register_new_users' => isset($_POST['register_new_users']),
-		'link_by_verified_email' => isset($_POST['link_by_verified_email']),
+		'link_by_email' => in_array($_POST['link_by_email'] ?? '', ['verified', 'all'], true) ? $_POST['link_by_email'] : '',
 		'redirect_new_to_profile' => isset($_POST['redirect_new_to_profile']),
 		'notify_admins_on_register' => isset($_POST['notify_admins_on_register']),
 		'notify_user_on_register' => isset($_POST['notify_user_on_register']),
